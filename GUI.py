@@ -387,7 +387,7 @@ with col_logo:
                 SEA Consultancy Ltd<span style='font-size: 12px; font-weight: 400;'> © 2025</span>
             </span>
         </div>
-    """.format(__import__('base64').b64encode(open(r"C:\Users\Helen\OneDrive - seaconsultancy.uk\SEA Consultancy Ltd\Office setup and templates\circle logo transparent background.png", 'rb').read()).decode()), 
+    """.format(__import__('base64').b64encode(open("circle logo.png", "rb").read()).decode()), 
     unsafe_allow_html=True)
 
 with col_title:
