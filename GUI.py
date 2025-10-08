@@ -62,14 +62,12 @@ HIERARCHY = {
         'Computer Science': ['Horizon'],
         'Pharmacy': [],
         'Physics and Astronomy': [],
-        'Science Central': []
     },
     'Social Sciences': {
         'Geography': [],
-        'Social Sciences Central': ['Rights Lab'],
         'SSP': [],
         'Economics': [],
-        'SPIR': [],
+        'SPIR': ['Rights Lab'],
         'NUBS': ['HR Business Partnering Policy and Projects'],
         'Education': ['Education Dept', 'Centre for English Language Education'],
         'Law': []
@@ -183,7 +181,7 @@ def get_parent_locks_for_research_group(df, research_group):
     return list(set(affected_locks))
 
 def lock_entity_and_children(level, entity, criteria):
-    """Lock an entity and all its children with the same criteria"""
+    """Lock an entity - Department locks are NOT automatically created"""
     key = f"{level}::{entity}"
     st.session_state.locked_entities[key] = {
         'criteria': deepcopy(criteria),
@@ -191,15 +189,7 @@ def lock_entity_and_children(level, entity, criteria):
         'inherited_from': None
     }
     
-    # Lock all children
-    children = get_children(level, entity)
-    for child_level, child_entity in children:
-        child_key = f"{child_level}::{child_entity}"
-        st.session_state.locked_entities[child_key] = {
-            'criteria': deepcopy(criteria),
-            'timestamp': datetime.now().isoformat(),
-            'inherited_from': key
-        }
+    # NO automatic child locking - users must explicitly lock Departments if desired
 
 def unlock_entity_only(level, entity):
     """Unlock the entity and all its inherited children"""
@@ -353,7 +343,7 @@ def get_locked_excluded_ids(df):
         lock_excluded = apply_criteria(lock_staff, lock_data['criteria'])
         
         # For all staff in this entity, record their exclusion status
-        # This OVERWRITES any previous status from lower-priority locks
+        # Higher priority locks OVERWRITE lower priority ones
         for staff_id in lock_staff.index:
             staff_exclusions[staff_id] = (staff_id in lock_excluded, lock_key)
     
@@ -519,8 +509,25 @@ if st.session_state.data is not None:
             st.markdown(f"# {entity}")
             st.caption(f"{level}")
             
+            # Show parent lock information for Departments
+            if level == 'Department' and has_parent_lock and not st.session_state.show_unlock_warning:
+                parent_level, parent_entity, parent_data = parent_locks[0]
+                
+                # Count how many staff would be affected by override
+                dept_staff = get_staff_for_entity(df, 'Department', entity)
+                school_excluded = apply_criteria(dept_staff, parent_data['criteria'])
+                
+                st.markdown(f"""
+                <div class='warning-box'>
+                    <strong>⚠️ Override Parent School Rules?</strong><br>
+                    This Department is part of <strong>{parent_entity}</strong> which has exclusion rules applied.<br>
+                    <small>• {len(school_excluded)} staff in this Department are currently excluded by {parent_entity} rules</small><br>
+                    <small>• Applying new Department rules will override the {parent_entity} rules for ALL {len(dept_staff)} staff in this Department</small>
+                </div>
+                """, unsafe_allow_html=True)
+
             # Show parent lock information for Research Groups
-            if level == 'Research Group' and has_parent_lock and not st.session_state.show_unlock_warning:
+            elif level == 'Research Group' and has_parent_lock and not st.session_state.show_unlock_warning:
                 unique_locks = list(set(parent_locks_info))
                 lock_text = ', '.join([f"{entity} ({lvl})" for lvl, entity in unique_locks])
                 st.markdown(f"""
