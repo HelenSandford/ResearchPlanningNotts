@@ -315,7 +315,7 @@ def calculate_metrics(staff_data, excluded_ids=None):
                 'cit_per_fte': 0, 'cit_per_pub': 0, 'total_rt_cost': 0}
     
     total_fte = included['Full-Time Equivalent'].sum()
-    total_coi = included['CoI income (Â£)'].sum()
+    total_coi = included['CoI income (£)'].sum()
     total_schol = included['Scholarly Output'].sum()
     total_cit = included['Citations'].sum()
     
@@ -400,7 +400,7 @@ with col_upload:
         if uploaded_file is not None:
             try:
                 df = pd.read_csv(uploaded_file)
-                numeric_cols = ['Full-Time Equivalent', 'Length of service (years)', 'CoI income (Â£)',
+                numeric_cols = ['Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)',
                               'Nr of research projects', 'Scholarly Output', 'Citations',
                               'Citations per Publication']
                 for col in numeric_cols:
@@ -683,7 +683,7 @@ if st.session_state.data is not None:
                                     st.session_state.preview_criteria[idx]['bottom_percentile'] = percent
                                     st.rerun()
                                 
-                                metric_options = ['CoI income (Â£)', 'Scholarly Output', 'Citations']
+                                metric_options = ['CoI income (£)', 'Scholarly Output', 'Citations']
                                 selected_metrics = st.multiselect("Metrics", metric_options,
                                     default=criterion.get('sort_by', []),
                                     key=f"metrics_{idx}", disabled=is_locked,
@@ -703,7 +703,7 @@ if st.session_state.data is not None:
                 st.markdown("### Detailed Metrics")
                 
                 metrics_data = {
-                    'Metric': ['Staff Count', 'Total FTE', 'CoI income (Â£)', 'Avg CoI/FTE (£)',
+                    'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
                               'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
                               'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️'],
                     'Before': [
@@ -746,7 +746,7 @@ if st.session_state.data is not None:
                     st.rerun()
             
             metrics_data = {
-                'Metric': ['Staff Count', 'Total FTE', 'CoI income (Â£)', 'Avg CoI/FTE (£)',
+                'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
                           'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
                           'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£)'],
                 'Before': [
@@ -924,7 +924,7 @@ if st.session_state.data is not None:
                 rg_data = []
                 for rg in all_rgs:
                     rg_staff = get_staff_for_entity(df, 'Research Group', rg)
-                    total_coi = rg_staff['CoI income (Â£)'].sum()
+                    total_coi = rg_staff['CoI income (£)'].sum()
                     staff_count = len(rg_staff)
                     rg_data.append({
                         'name': rg,
@@ -1042,7 +1042,7 @@ if st.session_state.data is not None:
                     
                     cols_to_show = ['Status', 'Exclusion Reason(s)', 'Person Number', 'Last Name', 'First Name', 'Grade Name', 'Faculty', 
                                 'School', 'Department', 'Full-Time Equivalent', 
-                                'Length of service (years)', 'CoI income (Â£)', 'Scholarly Output', 'Citations']
+                                'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 'Citations']
                     
                     cols_available = [c for c in cols_to_show if c in display_df.columns]
                     
