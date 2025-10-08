@@ -1048,8 +1048,8 @@ if st.session_state.data is not None:
                     )
                     
                     cols_to_show = ['Status', 'Exclusion Reason(s)', 'Person Number', 'Last Name', 'First Name', 'Grade Name', 'Faculty', 
-                                'School', 'Department', 'Full-Time Equivalent', 
-                                'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 'Citations']
+                                'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 
+                                    'Citations', 'Research Group 1','Research Group 2','Research Group 3','Research Group 4']
                     
                     cols_available = [c for c in cols_to_show if c in display_df.columns]
                     
