@@ -895,7 +895,7 @@ if st.session_state.data is not None:
                 
                 st.bar_chart(chart_data_cost.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
             
-                st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only./n/n")
+                st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only.\n\n")
         
 # Default view with tabs
         else:
