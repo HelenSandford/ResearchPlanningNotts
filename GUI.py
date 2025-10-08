@@ -387,7 +387,7 @@ with col_logo:
                 SEA Consultancy Ltd<span style='font-size: 12px; font-weight: 400;'> © 2025</span>
             </span>
         </div>
-    """.format(__import__('base64').b64encode(open("logo.png", "rb").read()).decode()), 
+    """.format(__import__('base64').b64encode(open(r"C:\Users\Helen\OneDrive - seaconsultancy.uk\SEA Consultancy Ltd\Office setup and templates\circle logo transparent background.png", 'rb').read()).decode()), 
     unsafe_allow_html=True)
 
 with col_title:
@@ -890,20 +890,57 @@ if st.session_state.data is not None:
             
                 st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only.")
         
-        # Default view with tabs
+# Default view with tabs
         else:
             # Check if showing research groups grid
             if st.session_state.show_research_groups:
                 st.markdown("### Research Groups")
                 st.markdown("---")
                 
-                col_back, _ = st.columns([1, 5])
+                col_back, col_sort, col_order = st.columns([2, 2, 2])
                 with col_back:
                     if st.button("← Back to Main View", key="back_from_rg"):
                         st.session_state.show_research_groups = False
                         st.rerun()
                 
-                research_groups = get_entities(df, 'Research Group')
+                with col_sort:
+                    sort_option = st.selectbox(
+                        "Sort by:",
+                        ["Name (A-Z)", "CoI Total", "Group Size (# Staff)"],
+                        key="rg_sort"
+                    )
+                
+                with col_order:
+                    sort_order = st.selectbox(
+                        "Order:",
+                        ["Ascending", "Descending"],
+                        key="rg_order"
+                    )
+                
+                # Get all research groups first
+                all_rgs = get_entities(df, 'Research Group')
+                
+                # Build list with metrics for sorting
+                rg_data = []
+                for rg in all_rgs:
+                    rg_staff = get_staff_for_entity(df, 'Research Group', rg)
+                    total_coi = rg_staff['CoI income (£)'].sum()
+                    staff_count = len(rg_staff)
+                    rg_data.append({
+                        'name': rg,
+                        'coi': total_coi,
+                        'size': staff_count
+                    })
+                
+                # Sort based on selection
+                if sort_option == "Name (A-Z)":
+                    rg_data.sort(key=lambda x: x['name'], reverse=(sort_order == "Descending"))
+                elif sort_option == "CoI Total":
+                    rg_data.sort(key=lambda x: x['coi'], reverse=(sort_order == "Descending"))
+                else:  # Group Size
+                    rg_data.sort(key=lambda x: x['size'], reverse=(sort_order == "Descending"))
+                
+                research_groups = [item['name'] for item in rg_data]
                 
                 # Display in grid format (4 columns)
                 num_cols = 4
@@ -916,7 +953,7 @@ if st.session_state.data is not None:
                             rg = research_groups[idx]
                             key = f"Research Group::{rg}"
                             is_locked = key in st.session_state.locked_entities
-                            icon = "🔐" if is_locked else "🟢"
+                            icon = "🔒" if is_locked else "🟢"
                             if st.button(f"{icon} {rg}", key=f"rg_{rg}", use_container_width=True):
                                 st.session_state.selected_entity = rg
                                 st.session_state.selected_level = 'Research Group'
@@ -941,7 +978,7 @@ if st.session_state.data is not None:
                             key = f"Faculty::{fac}"
                             is_locked = key in st.session_state.locked_entities
                             is_inherited = is_locked and st.session_state.locked_entities[key].get('inherited_from') is not None
-                            icon = "🔐" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
+                            icon = "🔒" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
                             if st.button(f"{icon} {fac}", key=f"fac_{fac}", use_container_width=True):
                                 st.session_state.selected_entity = fac
                                 st.session_state.selected_level = 'Faculty'
@@ -958,7 +995,7 @@ if st.session_state.data is not None:
                             key = f"School::{sch}"
                             is_locked = key in st.session_state.locked_entities
                             is_inherited = is_locked and st.session_state.locked_entities[key].get('inherited_from') is not None
-                            icon = "🔐" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
+                            icon = "🔒" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
                             if st.button(f"{icon} {sch}", key=f"sch_{sch}", use_container_width=True):
                                 st.session_state.selected_entity = sch
                                 st.session_state.selected_level = 'School'
@@ -975,7 +1012,7 @@ if st.session_state.data is not None:
                             key = f"Department::{dep}"
                             is_locked = key in st.session_state.locked_entities
                             is_inherited = is_locked and st.session_state.locked_entities[key].get('inherited_from') is not None
-                            icon = "🔐" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
+                            icon = "🔒" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
                             if st.button(f"{icon} {dep}", key=f"dep_{dep}", use_container_width=True):
                                 st.session_state.selected_entity = dep
                                 st.session_state.selected_level = 'Department'
