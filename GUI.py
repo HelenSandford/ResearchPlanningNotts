@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from copy import deepcopy
+import plotly.graph_objects as go
 
 # Page configuration
 st.set_page_config(page_title="Research Planning Dashboard", layout="wide", initial_sidebar_state="collapsed")
@@ -1058,30 +1059,57 @@ if st.session_state.data is not None:
                 st.dataframe(rg_df, use_container_width=True, hide_index=True, height=len(rg_df) * 35 + 38)
                 
                 st.markdown("---")
-                
+
                 # Create chart data
                 st.markdown("#### Staff Count by Research Group")
                 
-                # Prepare data for horizontal bar chart
-                chart_data = pd.DataFrame({
-                    'Research Group': rg_df['Research Group'],
-                    'Before': rg_df['Staff Before'],
-                    'After': rg_df['Staff After']
-                })
+                # Prepare data sorted by Before count
+                chart_data = rg_df.sort_values('Staff Before', ascending=True)
                 
-                # Sort by Before count (descending) for better visualization
-                chart_data = chart_data.sort_values('Before', ascending=True)
+                # Create overlapping horizontal bar chart using Plotly
+                import plotly.graph_objects as go
                 
-                st.bar_chart(
-                    chart_data.set_index('Research Group'),
-                    color=['#87CEEB', '#4682B4'],  # Light blue for Before, darker blue for After
-                    horizontal=True,
-                    height=max(400, len(chart_data) * 25)
+                fig = go.Figure()
+                
+                # Add Before bars (light blue, full width)
+                fig.add_trace(go.Bar(
+                    y=chart_data['Research Group'],
+                    x=chart_data['Staff Before'],
+                    name='Before',
+                    orientation='h',
+                    marker=dict(color='#87CEEB'),
+                    text=chart_data['Staff Before'],
+                    textposition='outside'
+                ))
+                
+                # Add After bars (darker blue, overlay on top)
+                fig.add_trace(go.Bar(
+                    y=chart_data['Research Group'],
+                    x=chart_data['Staff After'],
+                    name='After',
+                    orientation='h',
+                    marker=dict(color='#4682B4'),
+                    text=chart_data['Staff After'],
+                    textposition='outside'
+                ))
+                
+                # Update layout for overlay effect
+                fig.update_layout(
+                    barmode='overlay',  # This creates the overlay effect
+                    height=max(400, len(chart_data) * 30),
+                    xaxis_title="Staff Count",
+                    yaxis_title="Research Group",
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#e8e8e8')
                 )
                 
-                st.caption("💡 Light blue shows original staff count, darker blue shows current staff count after exclusions")
-            
-            
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.caption("💡 Light blue shows original staff count, darker blue overlay shows remaining staff after exclusions")
+               
             else:
                 tab1, tab2 = st.tabs(["Unit Selection", "ALL Staff"])
             
