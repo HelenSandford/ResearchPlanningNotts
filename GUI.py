@@ -1054,9 +1054,9 @@ if st.session_state.data is not None:
                 # Create DataFrame
                 rg_df = pd.DataFrame(rg_analysis)
                 
-                # Display table
-                st.markdown("#### Research Groups Summary Table")
-                st.dataframe(rg_df, use_container_width=True, hide_index=True, height=len(rg_df) * 35 + 38)
+                # Display table in an expander
+                with st.expander("📊 Research Groups Summary Table (Click to expand)", expanded=False):
+                    st.dataframe(rg_df, use_container_width=True, hide_index=True, height=400)
                 
                 st.markdown("---")
 
