@@ -324,19 +324,19 @@ def create_metrics_table(before_metrics, after_metrics):
             before_metrics['count'], f"{before_metrics['fte']:.2f}", f"£{before_metrics['total_coi']:,.0f}",
             f"£{before_metrics['coi_per_fte']:,.0f}", f"{before_metrics['total_schol']:.0f}",
             f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:.0f}",
-            f"{before_metrics['cit_per_fte']:.1f}", f"{before_metrics['cit_per_pub']:.2f}",
+            f"{before_metrics['cit_per_fte']:.0f}", f"{before_metrics['cit_per_pub']:.2f}",
             f"£{before_metrics['total_rt_cost']:,.0f}", f"{before_metrics['total_pgr']:.0f}",
             f"{before_metrics['pgr_per_fte']:.1f}", f"{before_metrics['total_ese_contact']:,.0f}", 
-            f"{before_metrics['ese_per_fte']:.2f}"
+            f"{before_metrics['ese_per_fte']:,.0f}"
         ],
         'After': [
             after_metrics['count'], f"{after_metrics['fte']:.2f}", f"£{after_metrics['total_coi']:,.0f}",
             f"£{after_metrics['coi_per_fte']:,.0f}", f"{after_metrics['total_schol']:.0f}",
             f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:.0f}",
-            f"{after_metrics['cit_per_fte']:.1f}", f"{after_metrics['cit_per_pub']:.2f}",
+            f"{after_metrics['cit_per_fte']:.0f}", f"{after_metrics['cit_per_pub']:.2f}",
             f"£{after_metrics['total_rt_cost']:,.0f}", f"{after_metrics['total_pgr']:.0f}",
             f"{after_metrics['pgr_per_fte']:.1f}", f"{after_metrics['total_ese_contact']:,.0f}", 
-            f"{after_metrics['ese_per_fte']:.2f}"
+            f"{after_metrics['ese_per_fte']:,.0f}"
         ],
         'Change': [
             after_metrics['count'] - before_metrics['count'], 
@@ -346,13 +346,13 @@ def create_metrics_table(before_metrics, after_metrics):
             f"{after_metrics['total_schol'] - before_metrics['total_schol']:.0f}",
             f"{after_metrics['schol_per_fte'] - before_metrics['schol_per_fte']:.2f}",
             f"{after_metrics['total_cit'] - before_metrics['total_cit']:.0f}",
-            f"{after_metrics['cit_per_fte'] - before_metrics['cit_per_fte']:.1f}",
+            f"{after_metrics['cit_per_fte'] - before_metrics['cit_per_fte']:.0f}",
             f"{after_metrics['cit_per_pub'] - before_metrics['cit_per_pub']:.2f}",
             f"£{after_metrics['total_rt_cost'] - before_metrics['total_rt_cost']:,.0f}",
             f"{after_metrics['total_pgr'] - before_metrics['total_pgr']:.0f}",
-            f"{after_metrics['pgr_per_fte'] - before_metrics['pgr_per_fte']:.1f}",
+            f"{after_metrics['pgr_per_fte'] - before_metrics['pgr_per_fte']:.0f}",
             f"{after_metrics['total_ese_contact'] - before_metrics['total_ese_contact']:,.0f}",
-            f"{after_metrics['ese_per_fte'] - before_metrics['ese_per_fte']:.2f}"                        
+            f"{after_metrics['ese_per_fte'] - before_metrics['ese_per_fte']:,.0f}"                        
         ]
     }
     return pd.DataFrame(metrics_data)
