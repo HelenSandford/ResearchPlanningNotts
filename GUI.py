@@ -274,13 +274,16 @@ def apply_single_criterion(staff_data, criterion):
         target_fte_to_exclude = total_fte * percent / 100
         
         # Accumulate staff until we reach the target FTE
+        # Stop BEFORE exceeding the target percentage
         cumulative_fte = 0
         to_exclude = []
         for idx, row in normalized_df.iterrows():
-            if cumulative_fte < target_fte_to_exclude:
+            # Check if adding this person would exceed the target
+            if cumulative_fte + row['Full-Time Equivalent'] <= target_fte_to_exclude:
                 to_exclude.append(idx)
                 cumulative_fte += row['Full-Time Equivalent']
             else:
+                # Would exceed target, so stop here
                 break
         
         return set(to_exclude)
