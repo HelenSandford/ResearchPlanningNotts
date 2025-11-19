@@ -1180,11 +1180,17 @@ if st.session_state.data is not None:
                 with tab2:
                     st.markdown("### Complete Staff List")
                     
+                    # Optimize: Pre-calculate all exclusion reasons once
+                    exclusion_map = {}
+                    for staff_id in df.index:
+                        if staff_id in locked_excluded:
+                            exclusion_map[staff_id] = '; '.join(get_exclusion_reasons(df, staff_id))
+                        else:
+                            exclusion_map[staff_id] = ''
+                    
                     display_df = df.copy()
                     display_df['Status'] = display_df.index.map(lambda x: '❌' if x in locked_excluded else '✅')
-                    display_df['Exclusion Reason(s)'] = display_df.index.map(
-                        lambda x: '; '.join(get_exclusion_reasons(df, x)) if x in locked_excluded else ''
-                    )
+                    display_df['Exclusion Reason(s)'] = display_df.index.map(exclusion_map)
                     
                     cols_to_show = ['Status', 'Exclusion Reason(s)', 'ID', 'Grade Name', 'Faculty', 
                                 'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 
