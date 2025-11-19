@@ -312,6 +312,51 @@ def get_rt_cost(grade_name):
     else:
         return 0
 
+def create_metrics_table(before_metrics, after_metrics):
+    """Create a standardized metrics comparison table"""
+    metrics_data = {
+        'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
+                  'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
+                  'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️',
+                  'Total PGRs', 'PGR per FTE', 'Total ESE Contact Hours', 'ESE Contact Hours per FTE'
+                  ],
+        'Before': [
+            before_metrics['count'], f"{before_metrics['fte']:.2f}", f"£{before_metrics['total_coi']:,.0f}",
+            f"£{before_metrics['coi_per_fte']:,.0f}", f"{before_metrics['total_schol']:.0f}",
+            f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:.0f}",
+            f"{before_metrics['cit_per_fte']:.1f}", f"{before_metrics['cit_per_pub']:.2f}",
+            f"£{before_metrics['total_rt_cost']:,.0f}", f"{before_metrics['total_pgr']:.0f}",
+            f"{before_metrics['pgr_per_fte']:.1f}", f"{before_metrics['total_ese_contact']:,.0f}", 
+            f"{before_metrics['ese_per_fte']:.2f}"
+        ],
+        'After': [
+            after_metrics['count'], f"{after_metrics['fte']:.2f}", f"£{after_metrics['total_coi']:,.0f}",
+            f"£{after_metrics['coi_per_fte']:,.0f}", f"{after_metrics['total_schol']:.0f}",
+            f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:.0f}",
+            f"{after_metrics['cit_per_fte']:.1f}", f"{after_metrics['cit_per_pub']:.2f}",
+            f"£{after_metrics['total_rt_cost']:,.0f}", f"{after_metrics['total_pgr']:.0f}",
+            f"{after_metrics['pgr_per_fte']:.1f}", f"{after_metrics['total_ese_contact']:,.0f}", 
+            f"{after_metrics['ese_per_fte']:.2f}"
+        ],
+        'Change': [
+            after_metrics['count'] - before_metrics['count'], 
+            f"{after_metrics['fte'] - before_metrics['fte']:.2f}",
+            f"£{after_metrics['total_coi'] - before_metrics['total_coi']:,.0f}",
+            f"£{after_metrics['coi_per_fte'] - before_metrics['coi_per_fte']:,.0f}",
+            f"{after_metrics['total_schol'] - before_metrics['total_schol']:.0f}",
+            f"{after_metrics['schol_per_fte'] - before_metrics['schol_per_fte']:.2f}",
+            f"{after_metrics['total_cit'] - before_metrics['total_cit']:.0f}",
+            f"{after_metrics['cit_per_fte'] - before_metrics['cit_per_fte']:.1f}",
+            f"{after_metrics['cit_per_pub'] - before_metrics['cit_per_pub']:.2f}",
+            f"£{after_metrics['total_rt_cost'] - before_metrics['total_rt_cost']:,.0f}",
+            f"{after_metrics['total_pgr'] - before_metrics['total_pgr']:.0f}",
+            f"{after_metrics['pgr_per_fte'] - before_metrics['pgr_per_fte']:.1f}",
+            f"{after_metrics['total_ese_contact'] - before_metrics['total_ese_contact']:,.0f}",
+            f"{after_metrics['ese_per_fte'] - before_metrics['ese_per_fte']:.2f}"                        
+        ]
+    }
+    return pd.DataFrame(metrics_data)
+
 def calculate_metrics(staff_data, excluded_ids=None):
     if excluded_ids is None:
         excluded_ids = set()
@@ -747,20 +792,26 @@ if st.session_state.data is not None:
                 metrics_data = {
                     'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
                               'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
-                              'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️'],
+                              'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️',
+                              'Total PGRs', 'PGR per FTE', 'Total ESE Contact Hours', 'ESE Contact Hours per FTE'
+                              ],
                     'Before': [
                         entity_before['count'], f"{entity_before['fte']:.2f}", f"£{entity_before['total_coi']:,.0f}",
                         f"£{entity_before['coi_per_fte']:,.0f}", f"{entity_before['total_schol']:.0f}",
                         f"{entity_before['schol_per_fte']:.2f}", f"{entity_before['total_cit']:.0f}",
                         f"{entity_before['cit_per_fte']:.1f}", f"{entity_before['cit_per_pub']:.2f}",
-                        f"£{entity_before['total_rt_cost']:,.0f}"
+                        f"£{entity_before['total_rt_cost']:,.0f}", f"£{entity_before['total_pgr']:,.0f}",
+                        f"£{entity_before['pgr_per_fte']:,.0f}", f"£{entity_before['total_ese_contact']:.2f}", 
+                        f"£{entity_before['ese_per_fte']:.2f}"
                     ],
                     'After': [
                         entity_after['count'], f"{entity_after['fte']:.2f}", f"£{entity_after['total_coi']:,.0f}",
                         f"£{entity_after['coi_per_fte']:,.0f}", f"{entity_after['total_schol']:.0f}",
                         f"{entity_after['schol_per_fte']:.2f}", f"{entity_after['total_cit']:.0f}",
                         f"{entity_after['cit_per_fte']:.1f}", f"{entity_after['cit_per_pub']:.2f}",
-                        f"£{entity_after['total_rt_cost']:,.0f}"
+                        f"£{entity_after['total_rt_cost']:,.0f}", f"£{entity_after['total_pgr']:,.0f}",
+                        f"£{entity_after['pgr_per_fte']:,.0f}", f"£{entity_after['total_ese_contact']:.2f}", 
+                        f"£{entity_after['ese_per_fte']:.2f}"
                     ],
                     'Change': [
                         entity_after['count'] - entity_before['count'], 
@@ -772,7 +823,11 @@ if st.session_state.data is not None:
                         f"{entity_after['total_cit'] - entity_before['total_cit']:.0f}",
                         f"{entity_after['cit_per_fte'] - entity_before['cit_per_fte']:.1f}",
                         f"{entity_after['cit_per_pub'] - entity_before['cit_per_pub']:.2f}",
-                        f"£{entity_after['total_rt_cost'] - entity_before['total_rt_cost']:,.0f}"
+                        f"£{entity_after['total_rt_cost'] - entity_before['total_rt_cost']:,.0f}",
+                        f"{entity_after['total_pgr'] - entity_before['total_pgr']:,.0f}",
+                        f"{entity_after['pgr_per_fte'] - entity_before['pgr_per_fte']:,.0f}",
+                        f"{entity_after['total_ese_contact'] - entity_before['total_ese_contact']:.2f}",
+                        f"{entity_after['ese_per_fte'] - entity_before['ese_per_fte']:.2f}"                        
                     ]
                 }
                 st.dataframe(pd.DataFrame(metrics_data), use_container_width=True, hide_index=True)
