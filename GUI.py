@@ -790,7 +790,7 @@ if st.session_state.data is not None:
                 st.markdown("### Detailed Metrics")
 
                 metrics_table = create_metrics_table(entity_before, entity_after)
-                st.dataframe(metrics_table, use_container_width=True, hide_index=True)
+                st.dataframe(metrics_table, use_container_width=True, hide_index=True,  height=len(metrics_table) * 35 + 38)
         
         # Show Detailed Report if button clicked
         elif st.session_state.get('show_detailed_report', False):
@@ -803,7 +803,7 @@ if st.session_state.data is not None:
                     st.rerun()
 
             metrics_table = create_metrics_table(before, after)
-            st.dataframe(metrics_table, use_container_width=True, hide_index=True)
+            st.dataframe(metrics_table, use_container_width=True, hide_index=True,  height=len(metrics_table) * 35 + 38)
             
             st.markdown("---")
             st.markdown("### Visual Analysis")
