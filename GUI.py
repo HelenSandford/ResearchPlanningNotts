@@ -256,12 +256,34 @@ def apply_single_criterion(staff_data, criterion):
     if criterion.get('bottom_percentile') and criterion.get('sort_by'):
         percent = criterion['bottom_percentile']
         sort_metrics = criterion['sort_by']
-        ascending_list = [True] * len(sort_metrics)
-        filtered = filtered.sort_values(by=sort_metrics, ascending=ascending_list)
-        total_staff = len(filtered)
-        num_to_exclude = int(np.ceil(total_staff * percent / 100))
-        to_exclude = filtered.iloc[:num_to_exclude]
-        return set(to_exclude.index)
+        
+        # Normalize metrics by FTE for fair comparison
+        normalized_df = filtered.copy()
+        for metric in sort_metrics:
+            if metric in filtered.columns and 'Full-Time Equivalent' in filtered.columns:
+                # Create normalized column (metric per FTE)
+                normalized_df[f'{metric}_normalized'] = filtered[metric] / filtered['Full-Time Equivalent']
+        
+        # Sort by normalized metrics
+        normalized_cols = [f'{m}_normalized' for m in sort_metrics]
+        ascending_list = [True] * len(normalized_cols)
+        normalized_df = normalized_df.sort_values(by=normalized_cols, ascending=ascending_list)
+        
+        # Calculate FTE-based exclusion
+        total_fte = normalized_df['Full-Time Equivalent'].sum()
+        target_fte_to_exclude = total_fte * percent / 100
+        
+        # Accumulate staff until we reach the target FTE
+        cumulative_fte = 0
+        to_exclude = []
+        for idx, row in normalized_df.iterrows():
+            if cumulative_fte < target_fte_to_exclude:
+                to_exclude.append(idx)
+                cumulative_fte += row['Full-Time Equivalent']
+            else:
+                break
+        
+        return set(to_exclude)
     
     return set()
 
@@ -274,22 +296,16 @@ def apply_criteria(staff_data, criteria_list):
     return excluded
 
 def get_rt_cost(grade_name):
-    """Get the R&T contract cost for a given grade"""
+    """Get the R&T contract cost for a given grade - GROUPED"""
     if pd.isna(grade_name):
         return 0
     grade_str = str(grade_name)
     if grade_str.startswith('RT5'):
-        return 51753
+        return 51573
     elif grade_str.startswith('RT6'):
-        return 67468
-    elif grade_str.startswith('RT7B'):
-        return 96179
-    elif grade_str.startswith('RT7C'):
-        return 114843
-    elif grade_str.startswith('RT7D'):
-        return 129257
+        return 69488
     elif grade_str.startswith('RT7'):
-        return 84458
+        return 102836
     else:
         return 0
 
