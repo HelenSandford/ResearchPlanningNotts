@@ -321,7 +321,8 @@ def calculate_metrics(staff_data, excluded_ids=None):
     if len(included) == 0:
         return {'count': 0, 'fte': 0, 'total_coi': 0, 'coi_per_fte': 0,
                 'total_schol': 0, 'schol_per_fte': 0, 'total_cit': 0,
-                'cit_per_fte': 0, 'cit_per_pub': 0, 'total_rt_cost': 0}
+                'cit_per_fte': 0, 'cit_per_pub': 0, 'total_rt_cost': 0,
+                'total_pgr': 0, 'pgr_per_fte': 0, 'total_ese_contact': 0, 'ese_per_fte': 0}
     
     total_fte = included['Full-Time Equivalent'].sum()
     total_coi = included['CoI income (£)'].sum()
@@ -332,6 +333,17 @@ def calculate_metrics(staff_data, excluded_ids=None):
     total_rt_cost = sum(get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'] 
                         for _, row in included.iterrows())
     
+    # Calculate PGR students
+    total_pgr = included['PGR Active students'].sum() if 'PGR Active students' in included.columns else 0
+    
+    # Calculate ESE Contact Hours (Hours * Sessions * Headcount)
+    total_ese_contact = 0
+    if all(col in included.columns for col in ['ESE Hours Timetabled', 'ESE Sessions Timetabled', 'ESE Headcount Timetabled']):
+        included['ESE_Contact_Hours'] = (included['ESE Hours Timetabled'] * 
+                                         included['ESE Sessions Timetabled'] * 
+                                         included['ESE Headcount Timetabled'])
+        total_ese_contact = included['ESE_Contact_Hours'].sum()
+    
     return {
         'count': len(included), 'fte': total_fte, 'total_coi': total_coi,
         'coi_per_fte': total_coi / total_fte if total_fte > 0 else 0,
@@ -340,7 +352,11 @@ def calculate_metrics(staff_data, excluded_ids=None):
         'total_cit': total_cit,
         'cit_per_fte': total_cit / total_fte if total_fte > 0 else 0,
         'cit_per_pub': total_cit / total_schol if total_schol > 0 else 0,
-        'total_rt_cost': total_rt_cost
+        'total_rt_cost': total_rt_cost,
+        'total_pgr': total_pgr,
+        'pgr_per_fte': total_pgr / total_fte if total_fte > 0 else 0,
+        'total_ese_contact': total_ese_contact,
+        'ese_per_fte': total_ese_contact / total_fte if total_fte > 0 else 0
     }
 
 def get_locked_excluded_ids(df):
@@ -1066,7 +1082,7 @@ if st.session_state.data is not None:
                         lambda x: '; '.join(get_exclusion_reasons(df, x)) if x in locked_excluded else ''
                     )
                     
-                    cols_to_show = ['Status', 'Exclusion Reason(s)', 'Person Number', 'Last Name', 'First Name', 'Grade Name', 'Faculty', 
+                    cols_to_show = ['Status', 'Exclusion Reason(s)', 'ID', 'Grade Name', 'Faculty', 
                                 'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 
                                     'Citations', 'Research Group 1','Research Group 2','Research Group 3','Research Group 4']
                     
