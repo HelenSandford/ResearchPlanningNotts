@@ -788,49 +788,9 @@ if st.session_state.data is not None:
                 
                 st.markdown("---")
                 st.markdown("### Detailed Metrics")
-                
-                metrics_data = {
-                    'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
-                              'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
-                              'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️',
-                              'Total PGRs', 'PGR per FTE', 'Total ESE Contact Hours', 'ESE Contact Hours per FTE'
-                              ],
-                    'Before': [
-                        entity_before['count'], f"{entity_before['fte']:.2f}", f"£{entity_before['total_coi']:,.0f}",
-                        f"£{entity_before['coi_per_fte']:,.0f}", f"{entity_before['total_schol']:.0f}",
-                        f"{entity_before['schol_per_fte']:.2f}", f"{entity_before['total_cit']:.0f}",
-                        f"{entity_before['cit_per_fte']:.1f}", f"{entity_before['cit_per_pub']:.2f}",
-                        f"£{entity_before['total_rt_cost']:,.0f}", f"£{entity_before['total_pgr']:,.0f}",
-                        f"£{entity_before['pgr_per_fte']:,.0f}", f"£{entity_before['total_ese_contact']:.2f}", 
-                        f"£{entity_before['ese_per_fte']:.2f}"
-                    ],
-                    'After': [
-                        entity_after['count'], f"{entity_after['fte']:.2f}", f"£{entity_after['total_coi']:,.0f}",
-                        f"£{entity_after['coi_per_fte']:,.0f}", f"{entity_after['total_schol']:.0f}",
-                        f"{entity_after['schol_per_fte']:.2f}", f"{entity_after['total_cit']:.0f}",
-                        f"{entity_after['cit_per_fte']:.1f}", f"{entity_after['cit_per_pub']:.2f}",
-                        f"£{entity_after['total_rt_cost']:,.0f}", f"£{entity_after['total_pgr']:,.0f}",
-                        f"£{entity_after['pgr_per_fte']:,.0f}", f"£{entity_after['total_ese_contact']:.2f}", 
-                        f"£{entity_after['ese_per_fte']:.2f}"
-                    ],
-                    'Change': [
-                        entity_after['count'] - entity_before['count'], 
-                        f"{entity_after['fte'] - entity_before['fte']:.2f}",
-                        f"£{entity_after['total_coi'] - entity_before['total_coi']:,.0f}",
-                        f"£{entity_after['coi_per_fte'] - entity_before['coi_per_fte']:,.0f}",
-                        f"{entity_after['total_schol'] - entity_before['total_schol']:.0f}",
-                        f"{entity_after['schol_per_fte'] - entity_before['schol_per_fte']:.2f}",
-                        f"{entity_after['total_cit'] - entity_before['total_cit']:.0f}",
-                        f"{entity_after['cit_per_fte'] - entity_before['cit_per_fte']:.1f}",
-                        f"{entity_after['cit_per_pub'] - entity_before['cit_per_pub']:.2f}",
-                        f"£{entity_after['total_rt_cost'] - entity_before['total_rt_cost']:,.0f}",
-                        f"{entity_after['total_pgr'] - entity_before['total_pgr']:,.0f}",
-                        f"{entity_after['pgr_per_fte'] - entity_before['pgr_per_fte']:,.0f}",
-                        f"{entity_after['total_ese_contact'] - entity_before['total_ese_contact']:.2f}",
-                        f"{entity_after['ese_per_fte'] - entity_before['ese_per_fte']:.2f}"                        
-                    ]
-                }
-                st.dataframe(pd.DataFrame(metrics_data), use_container_width=True, hide_index=True)
+
+                metrics_table = create_metrics_table(entity_before, entity_after)
+                st.dataframe(metrics_table, use_container_width=True, hide_index=True)
         
         # Show Detailed Report if button clicked
         elif st.session_state.get('show_detailed_report', False):
@@ -841,39 +801,9 @@ if st.session_state.data is not None:
                 if st.button("← Back", key="back_from_report"):
                     st.session_state.show_detailed_report = False
                     st.rerun()
-            
-            metrics_data = {
-                'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
-                          'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
-                          'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£)'],
-                'Before': [
-                    before['count'], f"{before['fte']:.2f}", f"£{before['total_coi']:,.0f}",
-                    f"£{before['coi_per_fte']:,.0f}", f"{before['total_schol']:.0f}",
-                    f"{before['schol_per_fte']:.2f}", f"{before['total_cit']:.0f}",
-                    f"{before['cit_per_fte']:.1f}", f"{before['cit_per_pub']:.2f}",
-                    f"£{before['total_rt_cost']:,.0f}"
-                ],
-                'After': [
-                    after['count'], f"{after['fte']:.2f}", f"£{after['total_coi']:,.0f}",
-                    f"£{after['coi_per_fte']:,.0f}", f"{after['total_schol']:.0f}",
-                    f"{after['schol_per_fte']:.2f}", f"{after['total_cit']:.0f}",
-                    f"{after['cit_per_fte']:.1f}", f"{after['cit_per_pub']:.2f}",
-                    f"£{after['total_rt_cost']:,.0f}"
-                ],
-                'Change': [
-                    after['count'] - before['count'], 
-                    f"{after['fte'] - before['fte']:.2f}",
-                    f"£{after['total_coi'] - before['total_coi']:,.0f}",
-                    f"£{after['coi_per_fte'] - before['coi_per_fte']:,.0f}",
-                    f"{after['total_schol'] - before['total_schol']:.0f}",
-                    f"{after['schol_per_fte'] - before['schol_per_fte']:.2f}",
-                    f"{after['total_cit'] - before['total_cit']:.0f}",
-                    f"{after['cit_per_fte'] - before['cit_per_fte']:.1f}",
-                    f"{after['cit_per_pub'] - before['cit_per_pub']:.2f}",
-                    f"£{after['total_rt_cost'] - before['total_rt_cost']:,.0f}"
-                ]
-            }
-            st.dataframe(pd.DataFrame(metrics_data), use_container_width=True, hide_index=True)
+
+            metrics_table = create_metrics_table(before, after)
+            st.dataframe(metrics_table, use_container_width=True, hide_index=True)
             
             st.markdown("---")
             st.markdown("### Visual Analysis")
