@@ -100,6 +100,8 @@ if 'inherited_from' not in st.session_state:
     st.session_state.inherited_from = None
 if 'show_research_groups' not in st.session_state:
     st.session_state.show_research_groups = False
+if 'show_rg_analysis' not in st.session_state: 
+    st.session_state.show_rg_analysis = False     
 
 def get_faculty_for_school(school):
     """Get the faculty that contains a given school"""
@@ -922,13 +924,22 @@ if st.session_state.data is not None:
             # Check if showing research groups grid
             if st.session_state.show_research_groups:
                 st.markdown("### Research Groups")
-                st.markdown("---")
                 
-                col_back, col_sort, col_order = st.columns([2, 2, 2])
+                col_analysis, col_back = st.columns([2, 4])
+                with col_analysis:
+                    if st.button("📊 View Analysis & Charts", key="view_rg_analysis", type="primary", use_container_width=True):
+                        st.session_state.show_rg_analysis = True
+                        st.session_state.show_research_groups = False
+                        st.rerun()
+                
                 with col_back:
                     if st.button("← Back to Main View", key="back_from_rg"):
                         st.session_state.show_research_groups = False
                         st.rerun()
+                
+                st.markdown("---")
+                
+                col_sort, col_order = st.columns([2, 2])
                 
                 with col_sort:
                     sort_option = st.selectbox(
@@ -990,6 +1001,86 @@ if st.session_state.data is not None:
                                     st.session_state.preview_criteria = []
                                 st.session_state.show_research_groups = False
                                 st.rerun()
+                                
+                        # Show Research Groups Analysis if button clicked
+            elif st.session_state.get('show_rg_analysis', False):
+                st.markdown("### Research Groups Analysis")
+                
+                col_back, _ = st.columns([1, 5])
+                with col_back:
+                    if st.button("← Back", key="back_from_rg_analysis"):
+                        st.session_state.show_rg_analysis = False
+                        st.rerun()
+                
+                st.markdown("---")
+                
+                # Build research group analysis data
+                rg_analysis = []
+                all_rgs = get_entities(df, 'Research Group')
+                
+                for rg in sorted(all_rgs):
+                    rg_staff = get_staff_for_entity(df, 'Research Group', rg)
+                    
+                    # Calculate before metrics (all staff in group)
+                    before_count = len(rg_staff)
+                    before_fte = rg_staff['Full-Time Equivalent'].sum()
+                    
+                    # Calculate after metrics (excluding locked exclusions)
+                    rg_excluded = set()
+                    key = f"Research Group::{rg}"
+                    if key in st.session_state.locked_entities:
+                        # Direct RG lock
+                        rg_excluded = apply_criteria(rg_staff, st.session_state.locked_entities[key]['criteria'])
+                    else:
+                        # Check for Faculty/School/Department locks affecting this RG's staff
+                        for staff_id in rg_staff.index:
+                            if staff_id in locked_excluded:
+                                rg_excluded.add(staff_id)
+                    
+                    after_count = before_count - len(rg_excluded)
+                    after_fte = rg_staff[~rg_staff.index.isin(rg_excluded)]['Full-Time Equivalent'].sum()
+                    
+                    rg_analysis.append({
+                        'Research Group': rg,
+                        'Staff Before': before_count,
+                        'Staff After': after_count,
+                        'Staff Change': after_count - before_count,
+                        'FTE Before': f"{before_fte:.2f}",
+                        'FTE After': f"{after_fte:.2f}",
+                        'FTE Change': f"{after_fte - before_fte:.2f}"
+                    })
+                
+                # Create DataFrame
+                rg_df = pd.DataFrame(rg_analysis)
+                
+                # Display table
+                st.markdown("#### Research Groups Summary Table")
+                st.dataframe(rg_df, use_container_width=True, hide_index=True, height=len(rg_df) * 35 + 38)
+                
+                st.markdown("---")
+                
+                # Create chart data
+                st.markdown("#### Staff Count by Research Group")
+                
+                # Prepare data for horizontal bar chart
+                chart_data = pd.DataFrame({
+                    'Research Group': rg_df['Research Group'],
+                    'Before': rg_df['Staff Before'],
+                    'After': rg_df['Staff After']
+                })
+                
+                # Sort by Before count (descending) for better visualization
+                chart_data = chart_data.sort_values('Before', ascending=True)
+                
+                st.bar_chart(
+                    chart_data.set_index('Research Group'),
+                    color=['#87CEEB', '#4682B4'],  # Light blue for Before, darker blue for After
+                    horizontal=True,
+                    height=max(400, len(chart_data) * 25)
+                )
+                
+                st.caption("💡 Light blue shows original staff count, darker blue shows current staff count after exclusions")
+            
             
             else:
                 tab1, tab2 = st.tabs(["Unit Selection", "ALL Staff"])
