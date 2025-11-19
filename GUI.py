@@ -1056,15 +1056,7 @@ if st.session_state.data is not None:
                 
                 # Display table
                 st.markdown("#### Research Groups Summary Table")
-                
-                # Show first 10 rows by default
-                if len(rg_df) > 10:
-                    st.dataframe(rg_df.head(10), use_container_width=True, hide_index=True, height=10 * 35 + 38)
-                    
-                    with st.expander(f"📋 Show all {len(rg_df)} research groups"):
-                        st.dataframe(rg_df, use_container_width=True, hide_index=True, height=600)
-                else:
-                    st.dataframe(rg_df, use_container_width=True, hide_index=True, height=len(rg_df) * 35 + 38)
+                st.dataframe(rg_df, use_container_width=True, hide_index=True, height=400)
                 
                 st.markdown("---")
 
