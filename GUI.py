@@ -910,25 +910,21 @@ if st.session_state.data is not None:
                                 update_entity_rules(level, entity, st.session_state.current_criteria)
                                 st.rerun()
                                 
-            if num_rules == 0:
-                            # We need the full DataFrame `df` to calculate the FTE
-                            # The global declaration MUST be the first line referencing df
-                            global df 
-                            
-                            # Check if ANY staff in this unit are being excluded by ANY lock globally
-                            entity_staff_all = get_staff_for_entity(df, level, entity)
-                            
-                            # Get the staff IDs that are globally excluded AND belong to the current entity
-                            entity_staff_excluded_ids = locked_excluded_global.intersection(entity_staff_all.index)
-                            
-                            if len(entity_staff_excluded_ids) > 0:
-                                # Calculate the total FTE for the excluded staff
-                                excluded_staff_df = df[df.index.isin(entity_staff_excluded_ids)]
-                                excluded_fte = excluded_staff_df['Full-Time Equivalent'].sum()
-                                
-                                st.info(f"💡 **No LOCAL rules are active for this unit.** However, staff exclusions are being applied due to rules set at a lower level (affecting **{excluded_fte:.2f} FTE**).")
-                            else:
-                                st.info("No exclusion rules are currently active for this unit.")
+            if num_rules == 0:                            
+                # Check if ANY staff in this unit are being excluded by ANY lock globally
+                entity_staff_all = get_staff_for_entity(df, level, entity)
+                
+                # Get the staff IDs that are globally excluded AND belong to the current entity
+                entity_staff_excluded_ids = locked_excluded_global.intersection(entity_staff_all.index)
+                
+                if len(entity_staff_excluded_ids) > 0:
+                    # Calculate the total FTE for the excluded staff
+                    excluded_staff_df = df[df.index.isin(entity_staff_excluded_ids)]
+                    excluded_fte = excluded_staff_df['Full-Time Equivalent'].sum()
+                    
+                    st.info(f"💡 **No LOCAL rules are active for this unit.** However, staff exclusions are being applied due to rules set at a lower level (affecting **{excluded_fte:.2f} FTE**).")
+                else:
+                    st.info("No exclusion rules are currently active for this unit.")
             
             st.markdown("---")
             st.markdown("### Detailed Metrics")
