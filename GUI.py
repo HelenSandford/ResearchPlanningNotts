@@ -321,7 +321,7 @@ def create_metrics_table(before_metrics, after_metrics):
         'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
                   'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
                   'Avg Citations/FTE', 'Citations per Publication', 'Total R&T Cost (£) ⚠️',
-                  'Total PGRs', 'PGR per FTE', 'Total ESE Contact Hours', 'ESE Contact Hours per FTE'
+                  'Total Active PGRs', 'PGR per FTE', 'Total ESE Contact Hours', 'ESE Contact Hours per FTE'
                   ],
         'Before': [
             before_metrics['count'], f"{before_metrics['fte']:.2f}", f"£{before_metrics['total_coi']:,.0f}",
