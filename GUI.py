@@ -939,6 +939,7 @@ if st.session_state.data is not None:
 # Default view with tabs
         else:
             # Check if showing research groups grid
+# Check if showing research groups grid
             if st.session_state.show_research_groups:
                 st.markdown("### Research Groups")
                 
@@ -956,12 +957,35 @@ if st.session_state.data is not None:
                 
                 st.markdown("---")
                 
-                col_sort, col_order = st.columns([2, 2])
+                # Filter and Sort controls
+                col_filter_fac, col_filter_sch, col_sort, col_order = st.columns([2, 2, 2, 2])
+                
+                with col_filter_fac:
+                    all_faculties = ['All Faculties'] + sorted(df['Faculty'].dropna().unique().tolist())
+                    selected_faculty = st.selectbox(
+                        "Filter by Faculty:",
+                        all_faculties,
+                        key="rg_filter_faculty"
+                    )
+                
+                with col_filter_sch:
+                    # Get schools based on selected faculty
+                    if selected_faculty == 'All Faculties':
+                        available_schools = sorted(df['School'].dropna().unique().tolist())
+                    else:
+                        available_schools = sorted(df[df['Faculty'] == selected_faculty]['School'].dropna().unique().tolist())
+                    
+                    all_schools = ['All Schools'] + available_schools
+                    selected_school = st.selectbox(
+                        "Filter by School:",
+                        all_schools,
+                        key="rg_filter_school"
+                    )
                 
                 with col_sort:
                     sort_option = st.selectbox(
                         "Sort by:",
-                        ["Name (A-Z)", "CoI Total", "Group Size (# Staff)"],
+                        ["Name (A-Z)", "Faculty/School", "CoI Total", "Group Size (# Staff)"],
                         key="rg_sort"
                     )
                 
@@ -975,40 +999,84 @@ if st.session_state.data is not None:
                 # Get all research groups first
                 all_rgs = get_entities(df, 'Research Group')
                 
-                # Build list with metrics for sorting
+                # Build list with metrics for sorting and filtering
                 rg_data = []
                 for rg in all_rgs:
                     rg_staff = get_staff_for_entity(df, 'Research Group', rg)
+                    
+                    # Get primary faculty and school (most common among staff in this RG)
+                    faculty_counts = rg_staff['Faculty'].value_counts()
+                    school_counts = rg_staff['School'].value_counts()
+                    
+                    primary_faculty = faculty_counts.index[0] if len(faculty_counts) > 0 else 'Unknown'
+                    primary_school = school_counts.index[0] if len(school_counts) > 0 else 'Unknown'
+                    
                     total_coi = rg_staff['CoI income (£)'].sum()
                     staff_count = len(rg_staff)
+                    
                     rg_data.append({
                         'name': rg,
+                        'faculty': primary_faculty,
+                        'school': primary_school,
                         'coi': total_coi,
                         'size': staff_count
                     })
                 
+                # Apply filters
+                filtered_rg_data = rg_data
+                if selected_faculty != 'All Faculties':
+                    filtered_rg_data = [rg for rg in filtered_rg_data if rg['faculty'] == selected_faculty]
+                
+                if selected_school != 'All Schools':
+                    filtered_rg_data = [rg for rg in filtered_rg_data if rg['school'] == selected_school]
+                
                 # Sort based on selection
                 if sort_option == "Name (A-Z)":
-                    rg_data.sort(key=lambda x: x['name'], reverse=(sort_order == "Descending"))
+                    filtered_rg_data.sort(key=lambda x: x['name'], reverse=(sort_order == "Descending"))
+                elif sort_option == "Faculty/School":
+                    filtered_rg_data.sort(key=lambda x: (x['faculty'], x['school'], x['name']), 
+                                         reverse=(sort_order == "Descending"))
                 elif sort_option == "CoI Total":
-                    rg_data.sort(key=lambda x: x['coi'], reverse=(sort_order == "Descending"))
+                    filtered_rg_data.sort(key=lambda x: x['coi'], reverse=(sort_order == "Descending"))
                 else:  # Group Size
-                    rg_data.sort(key=lambda x: x['size'], reverse=(sort_order == "Descending"))
+                    filtered_rg_data.sort(key=lambda x: x['size'], reverse=(sort_order == "Descending"))
                 
-                research_groups = [item['name'] for item in rg_data]
+                # Display count of filtered groups
+                st.markdown(f"**Showing {len(filtered_rg_data)} of {len(rg_data)} research groups**")
+                st.markdown("---")
                 
-                # Display in grid format (4 columns)
+                # Display in grid format with headings if sorted by Faculty/School
                 num_cols = 4
-                num_groups = len(research_groups)
                 
-                for row_start in range(0, num_groups, num_cols):
-                    cols = st.columns(num_cols)
-                    for col_idx, idx in enumerate(range(row_start, min(row_start + num_cols, num_groups))):
-                        with cols[col_idx]:
-                            rg = research_groups[idx]
-                            key = f"Research Group::{rg}"
-                            is_locked = key in st.session_state.locked_entities
-                            icon = "🔒" if is_locked else "🟢"
+                if sort_option == "Faculty/School":
+                    # Group by faculty and school for display with headings
+                    current_faculty = None
+                    current_school = None
+                    
+                    for idx, rg_item in enumerate(filtered_rg_data):
+                        # Show faculty heading if changed
+                        if rg_item['faculty'] != current_faculty:
+                            current_faculty = rg_item['faculty']
+                            current_school = None  # Reset school when faculty changes
+                            st.markdown(f"### 🏛️ {current_faculty}")
+                        
+                        # Show school heading if changed
+                        if rg_item['school'] != current_school:
+                            current_school = rg_item['school']
+                            st.markdown(f"#### 🏫 {current_school}")
+                        
+                        # Display research group button
+                        rg = rg_item['name']
+                        key = f"Research Group::{rg}"
+                        is_locked = key in st.session_state.locked_entities
+                        icon = "🔒" if is_locked else "🟢"
+                        
+                        # Display in columns (4 per row)
+                        col_position = idx % num_cols
+                        if col_position == 0:
+                            cols = st.columns(num_cols)
+                        
+                        with cols[col_position]:
                             if st.button(f"{icon} {rg}", key=f"rg_{rg}", use_container_width=True):
                                 st.session_state.selected_entity = rg
                                 st.session_state.selected_level = 'Research Group'
@@ -1018,8 +1086,34 @@ if st.session_state.data is not None:
                                     st.session_state.preview_criteria = []
                                 st.session_state.show_research_groups = False
                                 st.rerun()
+                else:
+                    # Regular grid display without headings
+                    num_groups = len(filtered_rg_data)
+                    
+                    for row_start in range(0, num_groups, num_cols):
+                        cols = st.columns(num_cols)
+                        for col_idx, idx in enumerate(range(row_start, min(row_start + num_cols, num_groups))):
+                            with cols[col_idx]:
+                                rg_item = filtered_rg_data[idx]
+                                rg = rg_item['name']
+                                key = f"Research Group::{rg}"
+                                is_locked = key in st.session_state.locked_entities
+                                icon = "🔒" if is_locked else "🟢"
                                 
-                        # Show Research Groups Analysis if button clicked
+                                # Show faculty/school in button label when not grouped
+                                label = f"{icon} {rg}"
+                                if selected_faculty == 'All Faculties' or selected_school == 'All Schools':
+                                    label = f"{icon} {rg}\n({rg_item['school']})"
+                                
+                                if st.button(label, key=f"rg_{rg}", use_container_width=True):
+                                    st.session_state.selected_entity = rg
+                                    st.session_state.selected_level = 'Research Group'
+                                    if is_locked:
+                                        st.session_state.preview_criteria = deepcopy(st.session_state.locked_entities[key]['criteria'])
+                                    else:
+                                        st.session_state.preview_criteria = []
+                                    st.session_state.show_research_groups = False
+                                    st.rerun()
             elif st.session_state.get('show_rg_analysis', False):
                 st.markdown("### Research Groups Analysis")
                 
