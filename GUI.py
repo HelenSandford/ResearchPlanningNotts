@@ -457,7 +457,7 @@ with col_logo:
         <div style='display: flex; align-items: center;'>
             <img src='data:image/png;base64,{}' width='75' style='margin-right: 15px;'/>
             <span style='color: #E8E8E8; font-size: 20px; font-weight: 600; letter-spacing: 0.5px;'>
-                SEA Consultancy Ltd<span style='font-size: 12px; font-weight: 400;'> /n© 2025</span>
+                SEA Consultancy Ltd<span style='font-size: 12px; font-weight: 400;'> \n© 2025</span>
             </span>
         </div>
     """.format(__import__('base64').b64encode(open("logo.png", "rb").read()).decode()), 
