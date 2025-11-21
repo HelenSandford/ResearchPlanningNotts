@@ -316,7 +316,18 @@ def get_rt_cost(grade_name):
         return 0
 
 def create_metrics_table(before_metrics, after_metrics):
-    """Create a standardized metrics comparison table"""
+    """Create a standardized metrics comparison table with percentage changes"""
+    
+    def format_change_with_pct(change_val, before_val):
+        """Format change with percentage in brackets"""
+        if before_val == 0:
+            return f"{change_val:,.2f}" if isinstance(change_val, float) else str(change_val)
+        pct_change = (change_val / before_val) * 100 if before_val != 0 else 0
+        if isinstance(change_val, float):
+            return f"{change_val:,.2f} ({pct_change:+.1f}%)"
+        else:
+            return f"{change_val:,} ({pct_change:+.1f}%)"
+    
     metrics_data = {
         'Metric': ['Staff Count', 'Total FTE', 'Total CoI (£)', 'Avg CoI/FTE (£)',
                   'Total Scholarly Output', 'Avg Scholarly/FTE', 'Total Citations',
@@ -329,8 +340,8 @@ def create_metrics_table(before_metrics, after_metrics):
             f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:.0f}",
             f"{before_metrics['cit_per_fte']:.0f}", f"{before_metrics['cit_per_pub']:.2f}",
             f"£{before_metrics['total_rt_cost']:,.0f}", f"{before_metrics['total_pgr']:.0f}",
-            f"{before_metrics['pgr_per_fte']:.1f}", f"{before_metrics['total_ese_contact']:,.0f}", 
-            f"{before_metrics['ese_per_fte']:,.0f}"
+            f"{before_metrics['pgr_per_fte']:.2f}", f"{before_metrics['total_ese_contact']:,.0f}", 
+            f"{before_metrics['ese_per_fte']:.0f}"
         ],
         'After': [
             after_metrics['count'], f"{after_metrics['fte']:.2f}", f"£{after_metrics['total_coi']:,.0f}",
@@ -338,24 +349,24 @@ def create_metrics_table(before_metrics, after_metrics):
             f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:.0f}",
             f"{after_metrics['cit_per_fte']:.0f}", f"{after_metrics['cit_per_pub']:.2f}",
             f"£{after_metrics['total_rt_cost']:,.0f}", f"{after_metrics['total_pgr']:.0f}",
-            f"{after_metrics['pgr_per_fte']:.1f}", f"{after_metrics['total_ese_contact']:,.0f}", 
-            f"{after_metrics['ese_per_fte']:,.0f}"
+            f"{after_metrics['pgr_per_fte']:.2f}", f"{after_metrics['total_ese_contact']:,.0f}", 
+            f"{after_metrics['ese_per_fte']:.0f}"
         ],
         'Change': [
-            after_metrics['count'] - before_metrics['count'], 
-            f"{after_metrics['fte'] - before_metrics['fte']:.2f}",
-            f"£{after_metrics['total_coi'] - before_metrics['total_coi']:,.0f}",
-            f"£{after_metrics['coi_per_fte'] - before_metrics['coi_per_fte']:,.0f}",
-            f"{after_metrics['total_schol'] - before_metrics['total_schol']:.0f}",
-            f"{after_metrics['schol_per_fte'] - before_metrics['schol_per_fte']:.2f}",
-            f"{after_metrics['total_cit'] - before_metrics['total_cit']:.0f}",
-            f"{after_metrics['cit_per_fte'] - before_metrics['cit_per_fte']:.0f}",
-            f"{after_metrics['cit_per_pub'] - before_metrics['cit_per_pub']:.2f}",
-            f"£{after_metrics['total_rt_cost'] - before_metrics['total_rt_cost']:,.0f}",
-            f"{after_metrics['total_pgr'] - before_metrics['total_pgr']:.0f}",
-            f"{after_metrics['pgr_per_fte'] - before_metrics['pgr_per_fte']:.0f}",
-            f"{after_metrics['total_ese_contact'] - before_metrics['total_ese_contact']:,.0f}",
-            f"{after_metrics['ese_per_fte'] - before_metrics['ese_per_fte']:,.0f}"                        
+            format_change_with_pct(after_metrics['count'] - before_metrics['count'], before_metrics['count']),
+            format_change_with_pct(after_metrics['fte'] - before_metrics['fte'], before_metrics['fte']),
+            f"£{after_metrics['total_coi'] - before_metrics['total_coi']:,.0f} ({((after_metrics['total_coi'] - before_metrics['total_coi']) / before_metrics['total_coi'] * 100) if before_metrics['total_coi'] != 0 else 0:+.1f}%)",
+            f"£{after_metrics['coi_per_fte'] - before_metrics['coi_per_fte']:,.0f} ({((after_metrics['coi_per_fte'] - before_metrics['coi_per_fte']) / before_metrics['coi_per_fte'] * 100) if before_metrics['coi_per_fte'] != 0 else 0:+.1f}%)",
+            format_change_with_pct(after_metrics['total_schol'] - before_metrics['total_schol'], before_metrics['total_schol']),
+            format_change_with_pct(after_metrics['schol_per_fte'] - before_metrics['schol_per_fte'], before_metrics['schol_per_fte']),
+            format_change_with_pct(after_metrics['total_cit'] - before_metrics['total_cit'], before_metrics['total_cit']),
+            format_change_with_pct(after_metrics['cit_per_fte'] - before_metrics['cit_per_fte'], before_metrics['cit_per_fte']),
+            format_change_with_pct(after_metrics['cit_per_pub'] - before_metrics['cit_per_pub'], before_metrics['cit_per_pub']),
+            f"£{after_metrics['total_rt_cost'] - before_metrics['total_rt_cost']:,.0f} ({((after_metrics['total_rt_cost'] - before_metrics['total_rt_cost']) / before_metrics['total_rt_cost'] * 100) if before_metrics['total_rt_cost'] != 0 else 0:+.1f}%)",
+            "0 (0.0%)",  # PGR total stays constant
+            format_change_with_pct(after_metrics['pgr_per_fte'] - before_metrics['pgr_per_fte'], before_metrics['pgr_per_fte']),
+            "0 (0.0%)",  # ESE Contact Hours total stays constant
+            format_change_with_pct(after_metrics['ese_per_fte'] - before_metrics['ese_per_fte'], before_metrics['ese_per_fte'])
         ]
     }
     return pd.DataFrame(metrics_data)
