@@ -37,28 +37,6 @@ st.markdown("""
     .streamlit-expanderHeader { color: #e8e8e8 !important; }
     .warning-box { background-color: #ff6b35; color: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; }
     .inherited-rules { background-color: #2c3e50; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #8965e6; }
-    /* --- NEW RULE BOX STYLE --- */
-    .add-rule-box {
-        border: 2px dashed #4a4a60; /* Greyed out dotted border */
-        background-color: #1a1a2e; /* Same background */
-        padding: 20px;
-        border-radius: 5px;
-        text-align: center;
-        margin-bottom: 20px;
-        height: 100%; /* Match height of rule cards */
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-    .add-rule-box button {
-        background-color: #4a4a60 !important;
-        border: none !important;
-        color: #e8e8e8 !important;
-    }
-    .add-rule-box button:hover {
-        background-color: #8965e6 !important;
-    }
     /* --- Rule Card Styling to match the box height --- */
     .stMultiSelect, .stNumberInput {
         min-height: 50px; /* Ensure consistency for form elements */
@@ -912,19 +890,17 @@ if st.session_state.data is not None:
                             
                             if selected_metrics:
                                 st.caption(" → ".join([f"{i+1}. {m.split('(')[0].strip()}" for i, m in enumerate(selected_metrics)]))
-                                
+                    
                     elif idx == num_rules and (row_start + col_idx) == num_rules:
-                        # --- Display Dynamic Add Box ---
+                        # --- Display Dynamic Add Button ---
                         with cols[col_idx]:
-                            st.markdown("<div class='add-rule-box'>", unsafe_allow_html=True)
-                            st.markdown("Add New Rule")
-                            if st.button("➕", key="add_rule_dynamic", use_container_width=True):
+                            st.markdown("### <br>", unsafe_allow_html=True) # Use spacing for vertical alignment
+                            if st.button("➕ Add New Rule", key="add_rule_dynamic", use_container_width=True, type="primary"):
                                 # Add a new empty rule to the current criteria
                                 st.session_state.current_criteria.append({})
                                 # Automatically apply the updated rules (re-save the lock)
                                 update_entity_rules(level, entity, st.session_state.current_criteria)
                                 st.rerun()
-                            st.markdown("</div>", unsafe_allow_html=True)
 
             if num_rules == 0:
                 st.info("No exclusion rules are currently active for this unit.")
