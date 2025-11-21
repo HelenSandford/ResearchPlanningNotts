@@ -37,6 +37,32 @@ st.markdown("""
     .streamlit-expanderHeader { color: #e8e8e8 !important; }
     .warning-box { background-color: #ff6b35; color: #fff; padding: 15px; border-radius: 5px; margin: 10px 0; }
     .inherited-rules { background-color: #2c3e50; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #8965e6; }
+    /* --- NEW RULE BOX STYLE --- */
+    .add-rule-box {
+        border: 2px dashed #4a4a60; /* Greyed out dotted border */
+        background-color: #1a1a2e; /* Same background */
+        padding: 20px;
+        border-radius: 5px;
+        text-align: center;
+        margin-bottom: 20px;
+        height: 100%; /* Match height of rule cards */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    .add-rule-box button {
+        background-color: #4a4a60 !important;
+        border: none !important;
+        color: #e8e8e8 !important;
+    }
+    .add-rule-box button:hover {
+        background-color: #8965e6 !important;
+    }
+    /* --- Rule Card Styling to match the box height --- */
+    .stMultiSelect, .stNumberInput {
+        min-height: 50px; /* Ensure consistency for form elements */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,8 +125,9 @@ if 'selected_entity' not in st.session_state:
     st.session_state.selected_entity = None
 if 'selected_level' not in st.session_state:
     st.session_state.selected_level = None
-if 'preview_criteria' not in st.session_state:
-    st.session_state.preview_criteria = []
+if 'current_criteria' not in st.session_state:
+    # Use 'current_criteria' to hold the live, applied rules for the selected unit
+    st.session_state.current_criteria = [] 
 if 'show_unlock_warning' not in st.session_state:
     st.session_state.show_unlock_warning = False
 if 'inherited_from' not in st.session_state:
@@ -135,9 +162,7 @@ def get_children(level, entity):
     if level == 'Faculty':
         if entity in HIERARCHY:
             for school, departments in HIERARCHY[entity].items():
-                # Children are just the immediate next level (School)
                 children.append(('School', school))
-                # Departments are also children (two levels down) for completeness in lock propagation
                 for dept in departments:
                     children.append(('Department', dept))
     elif level == 'School':
@@ -160,7 +185,6 @@ def get_parent_locks(level, entity):
             if faculty:
                 fac_key = f"Faculty::{faculty}"
                 if fac_key in st.session_state.locked_entities:
-                    # Append in order of hierarchy: Faculty first
                     parents.insert(0, ('Faculty', faculty, st.session_state.locked_entities[fac_key]))
     elif level == 'School':
         faculty = get_faculty_for_school(entity)
@@ -177,35 +201,59 @@ def get_parent_locks_for_research_group(df, research_group):
     
     for staff_id in staff_in_rg.index:
         staff_row = df.loc[staff_id]
-        # Check Faculty lock
         if pd.notna(staff_row.get('Faculty')):
             fac_key = f"Faculty::{staff_row['Faculty']}"
             if fac_key in st.session_state.locked_entities:
                 affected_locks.append(('Faculty', staff_row['Faculty']))
-        # Check School lock
         if pd.notna(staff_row.get('School')):
             sch_key = f"School::{staff_row['School']}"
             if sch_key in st.session_state.locked_entities:
                 affected_locks.append(('School', staff_row['School']))
-        # Check Department lock
         if pd.notna(staff_row.get('Department')):
             dept_key = f"Department::{staff_row['Department']}"
             if dept_key in st.session_state.locked_entities:
                 affected_locks.append(('Department', staff_row['Department']))
     
-    # Return unique locks
     return list(set(affected_locks))
 
-def lock_entity_and_children(level, entity, criteria):
-    """Lock an entity - Department locks are NOT automatically created"""
+def update_entity_rules(level, entity, criteria):
+    """
+    Applies the criteria to the current entity and propagates the lock down.
+    This replaces lock_entity_and_children for the new auto-lock logic.
+    """
     key = f"{level}::{entity}"
-    st.session_state.locked_entities[key] = {
-        'criteria': deepcopy(criteria),
-        'timestamp': datetime.now().isoformat(),
-        'inherited_from': None
-    }
     
-    # NO automatic child locking - users must explicitly lock Departments if desired
+    if criteria:
+        # 1. Apply lock to the current entity
+        st.session_state.locked_entities[key] = {
+            'criteria': deepcopy(criteria),
+            'timestamp': datetime.now().isoformat(),
+            'inherited_from': None # This is a direct lock
+        }
+        
+        # 2. Propagate to children (Only for Faculty and School)
+        if level in ['Faculty', 'School']:
+            children = get_children(level, entity)
+            for child_level, child_entity in children:
+                child_key = f"{child_level}::{child_entity}"
+                
+                # Only apply the inherited lock if the child doesn't already have a direct lock
+                # We check the 'inherited_from' field to see if the existing lock is a direct lock (None)
+                existing_lock = st.session_state.locked_entities.get(child_key)
+                
+                if existing_lock and existing_lock.get('inherited_from') is None:
+                    # Child has a direct lock, do not overwrite or remove it
+                    continue
+                
+                # Apply the inherited lock (or remove an old inherited lock)
+                st.session_state.locked_entities[child_key] = {
+                    'criteria': deepcopy(criteria),
+                    'timestamp': datetime.now().isoformat(),
+                    'inherited_from': key # Mark as inherited
+                }
+    else:
+        # If criteria is empty, this means the rules are deleted, so we unlock
+        unlock_entity_only(level, entity)
 
 def unlock_entity_only(level, entity):
     """Unlock the entity and all its inherited children"""
@@ -253,7 +301,6 @@ def matches_grade(grade_name, grade_filter):
     return grade_str == grade_filter
 
 def apply_single_criterion(staff_data, criterion):
-    # This function is used to identify *which staff* are excluded by a *single rule*.
     filtered = staff_data.copy()
     
     if criterion.get('grades'):
@@ -274,41 +321,32 @@ def apply_single_criterion(staff_data, criterion):
         percent = criterion['bottom_percentile']
         sort_metrics = criterion['sort_by']
         
-        # Normalize metrics by FTE for fair comparison
         normalized_df = filtered.copy()
         for metric in sort_metrics:
             if metric in filtered.columns and 'Full-Time Equivalent' in filtered.columns:
-                # Create normalized column (metric per FTE), protect against division by zero
                 normalized_df[f'{metric}_normalized'] = filtered.apply(
                     lambda row: row[metric] / row['Full-Time Equivalent'] if row['Full-Time Equivalent'] > 0 else 0,
                     axis=1
                 )
         
-        # Sort by normalized metrics - lowest values are the 'bottom'
         normalized_cols = [f'{m}_normalized' for m in sort_metrics]
         ascending_list = [True] * len(normalized_cols)
         normalized_df = normalized_df.sort_values(by=normalized_cols, ascending=ascending_list, kind='stable')
         
-        # Calculate FTE-based exclusion
         total_fte = normalized_df['Full-Time Equivalent'].sum()
         target_fte_to_exclude = total_fte * percent / 100
         
-        # Accumulate staff until we reach the target FTE
-        # Stop BEFORE exceeding the target percentage
         cumulative_fte = 0
         to_exclude = []
         for idx, row in normalized_df.iterrows():
-            # Check if adding this person would exceed the target
             if cumulative_fte + row['Full-Time Equivalent'] <= target_fte_to_exclude:
                 to_exclude.append(idx)
                 cumulative_fte += row['Full-Time Equivalent']
             else:
-                # Would exceed target, so stop here
                 break
         
         return set(to_exclude)
     
-    # If not using percentile sorting, the excluded set is the index of the filtered DataFrame
     return set(filtered.index)
 
 def apply_criteria(staff_data, criteria_list):
@@ -316,7 +354,6 @@ def apply_criteria(staff_data, criteria_list):
         return set()
     excluded = set()
     for criterion in criteria_list:
-        # Each criterion is treated as an OR condition (additive exclusions)
         excluded.update(apply_single_criterion(staff_data, criterion))
     return excluded
 
@@ -340,7 +377,6 @@ def create_metrics_table(before_metrics, after_metrics):
     def format_change_with_pct(change_val, before_val):
         """Format change with percentage in brackets"""
         if before_val == 0:
-            # If before_val is 0, percentage change is undefined (or 0 if change_val is 0)
             pct_change = 0
         else:
             pct_change = (change_val / before_val) * 100
@@ -373,20 +409,20 @@ def create_metrics_table(before_metrics, after_metrics):
         'Before': [
             before_metrics['count'], f"{before_metrics['fte']:.2f}", f"£{before_metrics['total_coi']:,.0f}",
             f"£{before_metrics['coi_per_fte']:,.0f}", f"{before_metrics['total_schol']:.0f}",
-            f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:,.0f}",
+            f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:.0f}",
             f"{before_metrics['cit_per_fte']:.0f}", f"{before_metrics['cit_per_pub']:.2f}",
             f"£{before_metrics['total_rt_cost']:,.0f}", f"{before_metrics['total_pgr']:.0f}",
             f"{before_metrics['pgr_per_fte']:.2f}", f"{before_metrics['total_ese_contact']:,.0f}", 
-            f"{before_metrics['ese_per_fte']:,.0f}"
+            f"{before_metrics['ese_per_fte']:.0f}"
         ],
         'After': [
             after_metrics['count'], f"{after_metrics['fte']:.2f}", f"£{after_metrics['total_coi']:,.0f}",
             f"£{after_metrics['coi_per_fte']:,.0f}", f"{after_metrics['total_schol']:.0f}",
-            f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:,.0f}",
+            f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:.0f}",
             f"{after_metrics['cit_per_fte']:.0f}", f"{after_metrics['cit_per_pub']:.2f}",
             f"£{after_metrics['total_rt_cost']:,.0f}", f"{after_metrics['total_pgr']:.0f}",
             f"{after_metrics['pgr_per_fte']:.2f}", f"{after_metrics['total_ese_contact']:,.0f}", 
-            f"{after_metrics['ese_per_fte']:,.0f}"
+            f"{after_metrics['ese_per_fte']:.0f}"
         ],
         'Change': [
             format_change_with_pct(count_change, before_metrics['count']),
@@ -407,13 +443,9 @@ def create_metrics_table(before_metrics, after_metrics):
     }
     return pd.DataFrame(metrics_data)
 
-def calculate_metrics(staff_data, excluded_ids=None, original_staff_data=None):
+def calculate_metrics(staff_data, excluded_ids=None):
     """
     Calculates metrics.
-    - staff_data: The set of staff to calculate metrics FOR (e.g., all staff in a Faculty).
-    - excluded_ids: The staff IDs to EXCLUDE from the calculation (e.g., globally locked staff).
-    - original_staff_data: Used to keep totals for PGR/ESE constant for 'After' calcs (not used in this simplified version).
-    
     If excluded_ids is None, this calculates the 'Before' metrics.
     If excluded_ids is a set, this calculates the 'After' metrics.
     """
@@ -434,20 +466,15 @@ def calculate_metrics(staff_data, excluded_ids=None, original_staff_data=None):
     total_schol = included['Scholarly Output'].sum()
     total_cit = included['Citations'].sum()
     
-    # Calculate R&T costs for included staff
     total_rt_cost = included.apply(lambda row: get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'], axis=1).sum()
 
     # For PGR and ESE, the totals should be based on the *original* set of staff (staff_data), 
     # as excluding staff doesn't remove the students/teaching hours from the unit, only the FTE supporting them.
-    # The 'per FTE' metric then reflects the change.
     
-    # Calculate PGR students from original data (staff_data)
     total_pgr = staff_data['PGR Active students'].sum() if 'PGR Active students' in staff_data.columns else 0
     
-    # Calculate ESE Contact Hours from original data (staff_data)
     total_ese_contact = 0
     if all(col in staff_data.columns for col in ['ESE Hours Timetabled', 'ESE Sessions Timetabled', 'ESE Headcount Timetabled']):
-        # Use staff_data (before exclusions) for total contact hours
         staff_data_copy = staff_data.copy()
         staff_data_copy['ESE_Contact_Hours'] = (staff_data_copy['ESE Hours Timetabled'] * staff_data_copy['ESE Sessions Timetabled'] * staff_data_copy['ESE Headcount Timetabled'])
         total_ese_contact = staff_data_copy['ESE_Contact_Hours'].sum()
@@ -494,24 +521,18 @@ def get_locked_excluded_ids(df):
         lock_excluded = apply_criteria(lock_staff, lock_data['criteria'])
         
         # 3. For all staff in this entity, update their final exclusion status
-        # Higher priority locks OVERWRITE lower priority ones.
         for staff_id in lock_staff.index:
-            # Check if this staff member is explicitly excluded by the current lock
             is_excluded_by_this_lock = staff_id in lock_excluded
-            
-            # Update the status only if the current lock has higher or equal priority to existing, or if it's new
             current_priority = priority_map.get(lock_level, 0)
             
             if staff_id not in staff_exclusions:
-                # New staff member, record the result
                 staff_exclusions[staff_id] = (is_excluded_by_this_lock, lock_key)
             else:
-                # Existing staff member, check priority
                 _, existing_key = staff_exclusions[staff_id]
                 existing_level = existing_key.split('::')[0]
                 existing_priority = priority_map.get(existing_level, 0)
                 
-                # If current lock is higher priority, or same priority (e.g., two RG locks), overwrite
+                # If current lock is higher priority, or same priority, overwrite
                 if current_priority >= existing_priority:
                     staff_exclusions[staff_id] = (is_excluded_by_this_lock, lock_key)
     
@@ -522,13 +543,9 @@ def get_exclusion_reasons(df, staff_id):
     """Provides a list of lock entities that exclude the staff member."""
     reasons = []
     
-    # Priority: Faculty (lowest) < School < Department < Research Group (highest)
     priority_map = {'Faculty': 1, 'School': 2, 'Department': 3, 'Research Group': 4}
-    
-    # Get all locks that *could* apply to this staff member
     potential_locks = []
     
-    # Check hierarchy
     if staff_id in df.index:
         staff_row = df.loc[staff_id]
         levels_to_check = ['Faculty', 'School', 'Department']
@@ -540,7 +557,6 @@ def get_exclusion_reasons(df, staff_id):
                 if key in st.session_state.locked_entities:
                     potential_locks.append((key, st.session_state.locked_entities[key]))
         
-        # Check Research Groups
         for col in ['Research Group 1', 'Research Group 2', 'Research Group 3', 'Research Group 4']:
             rg = staff_row.get(col)
             if pd.notna(rg):
@@ -548,22 +564,16 @@ def get_exclusion_reasons(df, staff_id):
                 if key in st.session_state.locked_entities:
                     potential_locks.append((key, st.session_state.locked_entities[key]))
 
-    # Sort potential locks by priority (ascending)
     potential_locks.sort(key=lambda x: priority_map.get(x[0].split('::')[0], 0))
 
     final_exclusion_key = None
     
-    # Re-run the priority logic to find the single lock that determined the final status
     for lock_key, lock_data in potential_locks:
         lock_level, lock_entity = lock_key.split('::')
         
-        # 1. Get ALL staff in the entity associated with the lock
         lock_staff = get_staff_for_entity(df, lock_level, lock_entity)
-        
-        # 2. Identify the staff EXCLUDED by THIS lock's criteria
         lock_excluded = apply_criteria(lock_staff, lock_data['criteria'])
         
-        # If the staff member is excluded by this lock, this is the current "highest priority" exclusion
         if staff_id in lock_excluded:
             final_exclusion_key = lock_key
     
@@ -587,11 +597,9 @@ col_logo, col_title, col_upload = st.columns([2, 3, 2])
 # Add a dummy logo.png in base64 if it doesn't exist for running the code
 try:
     with col_logo:
-        # Check if logo.png exists, if not, use a dummy image (e.g., a small red square)
         try:
             logo_base64 = base64.b64encode(open("logo.png", "rb").read()).decode()
         except FileNotFoundError:
-            # 1x1 red PNG: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
             logo_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
             
         st.markdown(f"""
@@ -603,7 +611,6 @@ try:
             </div>
         """, unsafe_allow_html=True)
 except Exception:
-    # Fallback in case base64 handling is an issue
     with col_logo:
         st.markdown("## SEA Consultancy Ltd")
 
@@ -617,24 +624,21 @@ with col_upload:
         
         if uploaded_file is not None:
             try:
-                # Read file and preprocess
                 df = pd.read_csv(uploaded_file)
-                df.index.name = 'StaffID' # Ensure a distinct index
+                df.index.name = 'StaffID' 
                 
                 numeric_cols = ['Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)',
                               'Nr of research projects', 'Scholarly Output', 'Citations',
                               'Citations per Publication', 'PGR Active students', 
                               'ESE Hours Timetabled', 'ESE Sessions Timetabled', 'ESE Headcount Timetabled']
                 
-                # Coerce to numeric, filling NaNs with 0
                 for col in numeric_cols:
                     if col in df.columns:
                         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                         
-                # Ensure hierarchy columns are strings for merging/lookup
                 for col in ['Faculty', 'School', 'Department']:
                     if col in df.columns:
-                        df[col] = df[col].astype(str).replace({'nan': np.nan}) # replace 'nan' string with actual NaN
+                        df[col] = df[col].astype(str).replace({'nan': np.nan}) 
                 
                 st.session_state.data = df
                 st.rerun()
@@ -643,7 +647,6 @@ with col_upload:
     else:
         st.markdown(f"<div class='uploaded-file-info'>📊 {len(st.session_state.data)} records loaded</div>", unsafe_allow_html=True)
         if st.button("📤 Upload Different File", use_container_width=True):
-            # Clear all state variables
             for key in list(st.session_state.keys()):
                 if key != 'data' and not key.startswith('FormSubmitter'):
                     del st.session_state[key]
@@ -656,12 +659,10 @@ if st.session_state.data is not None:
     df = st.session_state.data
     
     # Calculate overall metrics
-    # This global list is correct for the overall view
     locked_excluded_global = get_locked_excluded_ids(df)
     before_global = calculate_metrics(df)
     after_global = calculate_metrics(df, locked_excluded_global)
     
-    # Main layout: Summary panel on left, content on right
     col_summary, col_main = st.columns([1, 4])
     
     # LEFT: Summary Panel
@@ -670,7 +671,16 @@ if st.session_state.data is not None:
             # --- ENTITY SUMMARY ---
             entity = st.session_state.selected_entity
             level = st.session_state.selected_level
-            
+            key = f"{level}::{entity}"
+
+            # If the unit has rules defined locally (either directly or inherited)
+            if key in st.session_state.locked_entities:
+                # The displayed rules are the applied rules
+                applied_criteria = st.session_state.locked_entities[key]['criteria']
+            else:
+                # The unit is completely unlocked/uninherited, applied rules are empty
+                applied_criteria = []
+                
             # 1. Get ALL staff belonging to the selected entity
             entity_staff_all = get_staff_for_entity(df, level, entity)
             
@@ -680,18 +690,11 @@ if st.session_state.data is not None:
             # 3. Calculate 'Before' (all staff in entity)
             entity_before = calculate_metrics(entity_staff_all)
             
-            # 4. Calculate 'After' (staff in entity - global exclusions)
-            # NOTE: We use the global exclusions here to reflect downstream changes
+            # 4. Calculate 'After' 
+            # Recalculate the excluded set if the rules were just edited (which now automatically locks)
+            # Since the global lock calculation (get_locked_excluded_ids) already runs before this section, 
+            # and rule changes trigger a rerun, we can just rely on the global set.
             entity_after = calculate_metrics(entity_staff_all, entity_staff_excluded_global)
-            
-            # If the unit is unlocked and we are previewing rules, override the 'After' calc.
-            key = f"{level}::{entity}"
-            if key not in st.session_state.locked_entities and len(st.session_state.preview_criteria) > 0:
-                 # Calculate exclusions from the preview criteria on top of global exclusions
-                 preview_exclusions_on_entity = apply_criteria(entity_staff_all, st.session_state.preview_criteria)
-                 # Apply both global (higher levels) AND preview (this level) exclusions
-                 combined_exclusions = entity_staff_excluded_global.union(preview_exclusions_on_entity)
-                 entity_after = calculate_metrics(entity_staff_all, combined_exclusions)
             
             st.markdown(f"### {entity} Summary")
             
@@ -716,10 +719,9 @@ if st.session_state.data is not None:
             
             st.markdown("---")
             if st.button("← Back to Overview", use_container_width=True):
-                # Reset all entity-specific state variables
                 st.session_state.selected_entity = None
                 st.session_state.selected_level = None
-                st.session_state.preview_criteria = []
+                st.session_state.current_criteria = [] # Reset to empty list
                 st.session_state.show_unlock_warning = False
                 st.session_state.inherited_from = None
                 st.rerun()
@@ -727,7 +729,6 @@ if st.session_state.data is not None:
             # --- OVERALL SUMMARY ---
             st.markdown("### Overall Summary")
             
-            # Calculate deltas
             staff_delta = after_global['count'] - before_global['count']
             fte_delta = after_global['fte'] - before_global['fte']
             coi_delta = after_global['coi_per_fte'] - before_global['coi_per_fte']
@@ -754,14 +755,16 @@ if st.session_state.data is not None:
     
     # RIGHT: Main Content
     with col_main:
-        # Show Unit Modification View if unit selected
         if st.session_state.selected_entity and st.session_state.selected_level:
             entity = st.session_state.selected_entity
             level = st.session_state.selected_level
             key = f"{level}::{entity}"
+            
+            # --- Rule Management Interface ---
+            
+            # 1. Determine applied rules and parent status
             is_locked = key in st.session_state.locked_entities
             
-            # Get parent lock info
             if level == 'Research Group':
                 parent_locks_info = get_parent_locks_for_research_group(df, entity)
                 has_parent_lock = len(parent_locks_info) > 0
@@ -775,238 +778,162 @@ if st.session_state.data is not None:
             st.caption(f"{level}")
             
             # Show parent lock information (Warning/Info boxes)
-            if level == 'Department' and has_parent_lock and not st.session_state.show_unlock_warning:
-                # Find the highest priority parent lock affecting the department's staff
-                dept_staff = get_staff_for_entity(df, 'Department', entity)
-                
-                # Check how many staff are affected by the current global locks
-                dept_affected_by_global = locked_excluded_global.intersection(dept_staff.index)
-                
-                st.markdown(f"""
-                <div class='warning-box'>
-                    <strong>⚠️ Rules are active from higher levels.</strong><br>
-                    <small>• {len(dept_affected_by_global)} staff in this Department are currently excluded by higher-level rules.</small><br>
-                    <small>• Locking new Department rules will override the higher-level rules for ALL {len(dept_staff)} staff in this Department, removing the existing exclusions for those staff.</small>
-                </div>
-                """, unsafe_allow_html=True)
-
-            elif level == 'Research Group' and has_parent_lock and not st.session_state.show_unlock_warning:
-                unique_locks = list(set(parent_locks_info))
-                lock_text = ', '.join([f"{entity} ({lvl})" for lvl, entity in unique_locks])
-                st.markdown(f"""
-                <div class='warning-box'>
-                    <strong>⚠️ Warning:</strong> Some staff in this research group have existing rules from: {lock_text}<br>
-                    <small>Rules applied to this research group will override previous Faculty/School/Department rules for these staff members.</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            elif level != 'Research Group' and has_parent_lock and not st.session_state.show_unlock_warning:
-                # This box is only relevant for levels that *can* inherit (School/Department)
-                # and are NOT already locked/unlocked via the warning dialog.
-                if key not in st.session_state.locked_entities and len(st.session_state.preview_criteria) == 0:
-                     # This unit is not locked and has no preview criteria, so it is implicitly inheriting.
-                    parent_level, parent_entity, parent_data = parent_locks[0]
+            # If the current unit is NOT directly locked, but is affected by a parent lock:
+            if not is_locked or is_inherited: 
+                if has_parent_lock and level != 'Research Group':
                     st.markdown(f"""
                     <div class='inherited-rules'>
-                        <strong>ℹ️ Rules Inherited From:</strong> {parent_entity} ({parent_level})<br>
-                        <small>This {level.lower()} is applying rules from a higher level. Click **Lock All & Apply** to override, or **+ Add Rule** to begin a local definition.</small>
+                        <strong>ℹ️ Inherited Rules:</strong> This unit is applying rules from a higher level. Any local rule added here will override parent rules for this unit.
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif has_parent_lock and level == 'Research Group':
+                    unique_locks = list(set(parent_locks_info))
+                    lock_text = ', '.join([f"{entity} ({lvl})" for lvl, entity in unique_locks])
+                    st.markdown(f"""
+                    <div class='warning-box'>
+                        <strong>⚠️ Warning:</strong> Some staff in this research group have existing rules from: {lock_text}<br>
+                        <small>Rules applied to this research group will override previous Faculty/School/Department rules for these staff members.</small>
                     </div>
                     """, unsafe_allow_html=True)
             
-            # Recalculate entity metrics (already done in summary panel, just fetching)
-            # 1. Get ALL staff belonging to the selected entity
-            entity_staff_all = get_staff_for_entity(df, level, entity)
-            
-            # 2. Filter the global exclusion set to only those staff in this entity
-            entity_staff_excluded_global = locked_excluded_global.intersection(entity_staff_all.index)
-            
-            # 3. Calculate 'Before' (all staff in entity)
-            entity_before = calculate_metrics(entity_staff_all)
-            
-            # 4. Calculate 'After' (staff in entity - global exclusions)
-            entity_after_global = calculate_metrics(entity_staff_all, entity_staff_excluded_global)
-            
-            # Override for local preview
-            entity_after = entity_after_global # Start with global effect
-            
-            # If the unit is unlocked and we are previewing rules, calculate the effect of preview criteria
-            key = f"{level}::{entity}"
-            if key not in st.session_state.locked_entities and len(st.session_state.preview_criteria) > 0:
-                 # Calculate exclusions from the preview criteria on top of global exclusions
-                 preview_exclusions_on_entity = apply_criteria(entity_staff_all, st.session_state.preview_criteria)
-                 # Apply both global (higher levels) AND preview (this level) exclusions
-                 combined_exclusions = entity_staff_excluded_global.union(preview_exclusions_on_entity)
-                 entity_after = calculate_metrics(entity_staff_all, combined_exclusions)
-            
-            st.markdown("---")
-            
-            # Handle unlock warning dialog
-            if st.session_state.show_unlock_warning and has_parent_lock and level != 'Research Group':
-                st.markdown("""
+            # If the unit is directly locked, but is a lower level (School/Department)
+            if is_locked and not is_inherited and level in ['School', 'Department']:
+                # Show the message that direct rules override parents, and list excluded count
+                dept_staff = get_staff_for_entity(df, level, entity)
+                # Check staff excluded by the unit's OWN rules
+                local_excluded = apply_criteria(dept_staff, st.session_state.locked_entities[key]['criteria'])
+
+                st.markdown(f"""
                 <div class='warning-box'>
-                    <h3>⚠️ Override Parent Rules?</h3>
-                    <p>This will permanently override rules applied at a higher level for this unit and its children. You can modify or remove the inherited rules for this specific unit.</p>
+                    <strong>✅ Active Local Rules.</strong><br>
+                    <small>• Rules applied here override any higher-level rules for all staff in this unit.</small><br>
+                    <small>• Currently excluding {len(local_excluded)} staff from this unit.</small>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Show inherited rules (only the highest priority one for display simplicity)
-                st.markdown("### Inherited Rules:")
-                # NOTE: parent_locks are sorted with Faculty first for Department, so [0] is the highest parent
-                parent_level, parent_entity, parent_data = parent_locks[0] 
-                for idx, criterion in enumerate(parent_data['criteria']):
-                    with st.expander(f"Rule {idx + 1} from {parent_entity} ({parent_level})"):
-                        if criterion.get('grades'):
-                            st.write(f"**Grades:** {', '.join(criterion['grades'])}")
-                        if criterion.get('service_years'):
-                            op, val = criterion['service_years']
-                            st.write(f"**Service Years:** {op} {val}")
-                        if criterion.get('bottom_percentile'):
-                            st.write(f"**Bottom Percentile:** {criterion['bottom_percentile']}%")
-                        if criterion.get('sort_by'):
-                            st.write(f"**Sort By:** {' → '.join(criterion['sort_by'])}")
-                col_confirm, col_cancel = st.columns(2)
-                with col_confirm:
-                    if st.button("✓ Continue & Override", use_container_width=True, type="primary"):
-                        # Copy parent criteria to preview for editing
-                        parent_level, parent_entity, parent_data = parent_locks[0]
-                        st.session_state.preview_criteria = deepcopy(parent_data['criteria'])
-                        st.session_state.show_unlock_warning = False
-                        # Remove the inherited lock completely so it can be modified (it was just an inherited lock)
-                        # Unlock only the selected entity (this handles the inherited lock)
-                        unlock_entity_only(level, entity) 
-                        st.rerun()                
-                with col_cancel:
-                    if st.button("✗ Cancel", use_container_width=True):
-                        st.session_state.show_unlock_warning = False
-                        # Don't reset selection, just go back to normal view
-                        st.rerun()
-            
-            else:
-                # Normal rule management interface
-                col_action1, col_action2, _ = st.columns([1, 1, 3])
-                with col_action1:
-                    if not is_locked: # Only allow adding rule if unit is NOT locked
-                        if st.button("+ Add Rule", use_container_width=True):
-                            st.session_state.preview_criteria.append({})
-                            # Don't rerun immediately, let user enter data
-                with col_action2:
-                    if not is_locked:
-                        if st.button("Lock All & Apply", use_container_width=True, type="primary",
-                                   disabled=len(st.session_state.preview_criteria) == 0):
-                            if level == 'Research Group':
-                                # Research groups don't cascade, they just lock themselves
-                                st.session_state.locked_entities[key] = {
-                                    'criteria': deepcopy(st.session_state.preview_criteria),
-                                    'timestamp': datetime.now().isoformat(),
-                                    'inherited_from': None
-                                }
-                                st.success(f"Locked: {entity}")
-                            else:
-                                lock_entity_and_children(level, entity, st.session_state.preview_criteria)
-                                st.success(f"Locked: {entity} and all sub-units")
-                            st.session_state.preview_criteria = [] # Clear preview after locking
-                            st.rerun()
-                    else:
-                        # Unit IS locked
-                        if is_inherited and not st.session_state.show_unlock_warning and level != 'Research Group':
-                            if st.button("Override Parent Rule", use_container_width=True):
-                                # Trigger warning dialog to confirm override
-                                st.session_state.show_unlock_warning = True
-                                st.rerun()
-                        else: # Directly locked or Research Group lock
-                            if st.button("Unlock to Modify", use_container_width=True):
-                                st.session_state.preview_criteria = deepcopy(st.session_state.locked_entities[key]['criteria'])
-                                unlock_entity_only(level, entity)
-                                st.success(f"Unlocked: {entity}")
-                                st.rerun()
-                
-                st.markdown("### Exclusion Rules")
-                
-                # Rule display/editing interface
-                if is_locked:
-                    # If locked, display the locked rules (not the preview)
-                    rules_to_display = st.session_state.locked_entities[key]['criteria']
-                else:
-                    # If unlocked, display the preview rules
-                    rules_to_display = st.session_state.preview_criteria
-                
-                if rules_to_display:
-                    num_rules = len(rules_to_display)
-                    rules_per_row = 3
-                    
-                    for row_start in range(0, num_rules, rules_per_row):
-                        cols = st.columns(rules_per_row)
-                        for col_idx, idx in enumerate(range(row_start, min(row_start + rules_per_row, num_rules))):
-                            with cols[col_idx]:
-                                criterion = rules_to_display[idx]
-                                
-                                st.markdown(f"**Rule {idx + 1}**")
-                                
-                                if not is_locked:
-                                    # Only show delete button if unlocked (using preview_criteria)
-                                    if st.button("Delete", key=f"del_{idx}"):
-                                        st.session_state.preview_criteria.pop(idx)
-                                        st.rerun()
-                                
-                                # Use the centralized GRADE_OPTIONS
-                                selected_grades = st.multiselect("Grades", GRADE_OPTIONS,
-                                    default=criterion.get('grades', []),
-                                    key=f"grades_{idx}", disabled=is_locked,
-                                    label_visibility="collapsed",
-                                    placeholder="Choose grades or leave blank to select ALL")
-                                
-                                if not is_locked and selected_grades != st.session_state.preview_criteria[idx].get('grades', []):
-                                    st.session_state.preview_criteria[idx]['grades'] = selected_grades
-                                    st.rerun()
-                                
-                                st.caption("Years of Service")
-                                col_op, col_val = st.columns([1, 2])
-                                with col_op:
-                                    service_op = st.selectbox("Operator", ['', '>', '<'],
-                                        index=['', '>', '<'].index(criterion.get('service_years', ('', 0))[0]) if criterion.get('service_years') else 0,
-                                        key=f"service_op_{idx}", disabled=is_locked,
-                                        label_visibility="collapsed")
-                                with col_val:
-                                    service_val = st.number_input("Years", min_value=0.0, step=1.0,
-                                        value=float(criterion.get('service_years', ('', 0))[1]),
-                                        key=f"service_val_{idx}", disabled=is_locked,
-                                        label_visibility="collapsed")
-                                
-                                if not is_locked and service_op and (service_op, service_val) != st.session_state.preview_criteria[idx].get('service_years'):
-                                    st.session_state.preview_criteria[idx]['service_years'] = (service_op, service_val)
-                                    st.rerun()
-                                
-                                st.caption("Sort by %")
-                                percent = st.number_input("Bottom %", min_value=0, max_value=100,
-                                    value=criterion.get('bottom_percentile', 0),
-                                    key=f"percent_{idx}", disabled=is_locked,
-                                    label_visibility="collapsed")
-                                if not is_locked and percent != st.session_state.preview_criteria[idx].get('bottom_percentile', 0):
-                                    st.session_state.preview_criteria[idx]['bottom_percentile'] = percent
-                                    st.rerun()
-                                
-                                metric_options = ['CoI income (£)', 'Scholarly Output', 'Citations']
-                                selected_metrics = st.multiselect("Metrics", metric_options,
-                                    default=criterion.get('sort_by', []),
-                                    key=f"metrics_{idx}", disabled=is_locked,
-                                    label_visibility="collapsed",
-                                    placeholder="Exclude bottom % by... (multiselect in preference order)")
-                                
-                                if not is_locked and selected_metrics != st.session_state.preview_criteria[idx].get('sort_by', []):
-                                    st.session_state.preview_criteria[idx]['sort_by'] = selected_metrics
-                                    st.rerun()
-                                
-                                if selected_metrics:
-                                    st.caption(" → ".join([f"{i+1}. {m.split('(')[0].strip()}" for i, m in enumerate(selected_metrics)]))
-                else:
-                    st.info("No rules defined. Click '+ Add Rule' to create one.")
-                
-                st.markdown("---")
-                st.markdown("### Detailed Metrics")
 
-                # Use the calculated entity_before and entity_after (which correctly incorporates global/preview exclusions)
-                metrics_table = create_metrics_table(entity_before, entity_after)
-                st.dataframe(metrics_table, use_container_width=True, hide_index=True,  height=len(metrics_table) * 35 + 38)
+            st.markdown("---")
+            
+            st.markdown("### Exclusion Rules")
+
+            # Rules to display are always the applied rules, which are stored in the lock dictionary
+            rules_to_display = st.session_state.locked_entities[key]['criteria'] if is_locked else st.session_state.current_criteria
+
+            # --- Rule Editing and Dynamic Add Box ---
+            num_rules = len(rules_to_display)
+            rules_per_row = 3
+            
+            # Use a copy of the applied rules to manage changes before re-saving the lock
+            st.session_state.current_criteria = deepcopy(rules_to_display) 
+
+            for row_start in range(0, num_rules + 1, rules_per_row):
+                # We iterate up to num_rules + 1 to include the slot for the dynamic add box
+                cols = st.columns(rules_per_row)
+                
+                for col_idx, idx in enumerate(range(row_start, min(row_start + rules_per_row, num_rules + 1))):
+                    
+                    if idx < num_rules:
+                        # --- Display existing Rule Card ---
+                        with cols[col_idx]:
+                            criterion = st.session_state.current_criteria[idx]
+                            
+                            st.markdown(f"**Rule {idx + 1}**")
+                            
+                            # Delete button
+                            if st.button("Delete", key=f"del_{idx}", use_container_width=True):
+                                st.session_state.current_criteria.pop(idx)
+                                # Automatically apply the updated rules (re-save the lock)
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+
+                            # Grades multiselect
+                            selected_grades = st.multiselect("Grades", GRADE_OPTIONS,
+                                default=criterion.get('grades', []),
+                                key=f"grades_{idx}",
+                                label_visibility="collapsed",
+                                placeholder="Choose grades or leave blank to select ALL")
+                            
+                            # Check and save changes
+                            if selected_grades != st.session_state.current_criteria[idx].get('grades', []):
+                                st.session_state.current_criteria[idx]['grades'] = selected_grades
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+
+                            # Service Years
+                            st.caption("Years of Service")
+                            col_op, col_val = st.columns([1, 2])
+                            
+                            service_op_default = criterion.get('service_years', ('', 0))[0]
+                            service_val_default = float(criterion.get('service_years', ('', 0))[1])
+                            
+                            with col_op:
+                                service_op = st.selectbox("Operator", ['', '>', '<'],
+                                    index=['', '>', '<'].index(service_op_default),
+                                    key=f"service_op_{idx}",
+                                    label_visibility="collapsed")
+                            with col_val:
+                                service_val = st.number_input("Years", min_value=0.0, step=1.0,
+                                    value=service_val_default,
+                                    key=f"service_val_{idx}",
+                                    label_visibility="collapsed")
+                            
+                            if service_op and (service_op, service_val) != st.session_state.current_criteria[idx].get('service_years'):
+                                st.session_state.current_criteria[idx]['service_years'] = (service_op, service_val)
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+                            elif not service_op and 'service_years' in st.session_state.current_criteria[idx]:
+                                del st.session_state.current_criteria[idx]['service_years']
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+                            
+                            # Bottom %
+                            st.caption("Sort by %")
+                            percent = st.number_input("Bottom %", min_value=0, max_value=100,
+                                value=criterion.get('bottom_percentile', 0),
+                                key=f"percent_{idx}",
+                                label_visibility="collapsed")
+                            
+                            if percent != st.session_state.current_criteria[idx].get('bottom_percentile', 0):
+                                st.session_state.current_criteria[idx]['bottom_percentile'] = percent
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+                            
+                            # Metrics multiselect
+                            metric_options = ['CoI income (£)', 'Scholarly Output', 'Citations']
+                            selected_metrics = st.multiselect("Metrics", metric_options,
+                                default=criterion.get('sort_by', []),
+                                key=f"metrics_{idx}",
+                                label_visibility="collapsed",
+                                placeholder="Exclude bottom % by... (multiselect in preference order)")
+                            
+                            if selected_metrics != st.session_state.current_criteria[idx].get('sort_by', []):
+                                st.session_state.current_criteria[idx]['sort_by'] = selected_metrics
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+                            
+                            if selected_metrics:
+                                st.caption(" → ".join([f"{i+1}. {m.split('(')[0].strip()}" for i, m in enumerate(selected_metrics)]))
+                                
+                    elif idx == num_rules and (row_start + col_idx) == num_rules:
+                        # --- Display Dynamic Add Box ---
+                        with cols[col_idx]:
+                            st.markdown("<div class='add-rule-box'>", unsafe_allow_html=True)
+                            st.markdown("Add New Rule")
+                            if st.button("➕", key="add_rule_dynamic", use_container_width=True):
+                                # Add a new empty rule to the current criteria
+                                st.session_state.current_criteria.append({})
+                                # Automatically apply the updated rules (re-save the lock)
+                                update_entity_rules(level, entity, st.session_state.current_criteria)
+                                st.rerun()
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+            if num_rules == 0:
+                st.info("No exclusion rules are currently active for this unit.")
+            
+            st.markdown("---")
+            st.markdown("### Detailed Metrics")
+
+            metrics_table = create_metrics_table(entity_before, entity_after)
+            st.dataframe(metrics_table, use_container_width=True, hide_index=True,  height=len(metrics_table) * 35 + 38)
         
         # Show Detailed Report if button clicked
         elif st.session_state.get('show_detailed_report', False):
@@ -1024,40 +951,24 @@ if st.session_state.data is not None:
             st.markdown("---")
             st.markdown("### Visual Analysis")
             
-            # Helper function to categorize grades
             def categorize_grade(grade):
-                if pd.isna(grade):
-                    return 'Other'
+                if pd.isna(grade): return 'Other'
                 grade_str = str(grade)
-                if grade_str.startswith('RT5'):
-                    return 'RT5'
-                elif grade_str.startswith('RT6'):
-                    return 'RT6'
-                elif grade_str.startswith('RT7'):
-                    return 'RT7'
-                elif grade_str.startswith('CL'):
-                    return 'Clinical'
-                else:
-                    return 'Other'
+                if grade_str.startswith('RT5'): return 'RT5'
+                elif grade_str.startswith('RT6'): return 'RT6'
+                elif grade_str.startswith('RT7'): return 'RT7'
+                elif grade_str.startswith('CL'): return 'Clinical'
+                else: return 'Other'
             
-            # Helper function to categorize service years
             def categorize_service(years):
-                if years < 5:
-                    return '0-5'
-                elif years < 10:
-                    return '5-10'
-                elif years < 15:
-                    return '10-15'
-                elif years < 20:
-                    return '15-20'
-                elif years < 25:
-                    return '20-25'
-                elif years < 30:
-                    return '25-30'
-                else:
-                    return '30+'
+                if years < 5: return '0-5'
+                elif years < 10: return '5-10'
+                elif years < 15: return '10-15'
+                elif years < 20: return '15-20'
+                elif years < 25: return '20-25'
+                elif years < 30: return '25-30'
+                else: return '30+'
             
-            # Prepare data
             df_before = df.copy()
             df_after = df[~df.index.isin(locked_excluded_global)].copy()
             
@@ -1079,7 +990,12 @@ if st.session_state.data is not None:
                     'After': grade_after.values
                 })
                 
-                st.bar_chart(chart_data_grade.set_index('Grade'), color=['#210048', '#005070'], stack=False, height=500)
+                fig_grade = go.Figure(data=[
+                    go.Bar(name='Before', x=chart_data_grade['Grade'], y=chart_data_grade['Before'], marker_color='#8965e6'), 
+                    go.Bar(name='After', x=chart_data_grade['Grade'], y=chart_data_grade['After'], marker_color='#03c4da') 
+                ])
+                fig_grade.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
+                st.plotly_chart(fig_grade, use_container_width=True)
             
             with col_chart2:
                 st.markdown("#### FTE by Years of Service")
@@ -1091,11 +1007,17 @@ if st.session_state.data is not None:
                 service_after = df_after.groupby('Service_Category')['Full-Time Equivalent'].sum().reindex(service_order, fill_value=0)
                 
                 chart_data_service = pd.DataFrame({
+                    'Service': service_order,
                     'Before': service_before.values,
                     'After': service_after.values
-                }, index=pd.CategoricalIndex(service_order, categories=service_order, ordered=True))
+                })
                 
-                st.bar_chart(chart_data_service, color=['#210048', '#005070'], stack=False, height=500)
+                fig_service = go.Figure(data=[
+                    go.Bar(name='Before', x=chart_data_service['Service'], y=chart_data_service['Before'], marker_color='#8965e6'), 
+                    go.Bar(name='After', x=chart_data_service['Service'], y=chart_data_service['After'], marker_color='#03c4da') 
+                ])
+                fig_service.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
+                st.plotly_chart(fig_service, use_container_width=True)
             
             # Chart 3 & 4: FTE and R&T Costs by Faculty (side by side)
             col_chart3, col_chart4 = st.columns(2)
@@ -1111,12 +1033,16 @@ if st.session_state.data is not None:
                     'After': faculty_after.values
                 })
                 
-                st.bar_chart(chart_data_faculty.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
+                fig_faculty = go.Figure(data=[
+                    go.Bar(name='Before', x=chart_data_faculty['Faculty'], y=chart_data_faculty['Before'], marker_color='#8965e6'), 
+                    go.Bar(name='After', x=chart_data_faculty['Faculty'], y=chart_data_faculty['After'], marker_color='#03c4da') 
+                ])
+                fig_faculty.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
+                st.plotly_chart(fig_faculty, use_container_width=True)
             
             with col_chart4:
                 st.markdown("#### R&T Contract Costs by Faculty (£) ⚠️")
                 
-                # Calculate R&T costs by faculty
                 df_before['RT_Cost'] = df_before.apply(lambda row: get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'], axis=1)
                 df_after['RT_Cost'] = df_after.apply(lambda row: get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'], axis=1)
                 
@@ -1129,13 +1055,39 @@ if st.session_state.data is not None:
                     'After': cost_after.values
                 })
                 
-                st.bar_chart(chart_data_cost.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
+                fig_cost = go.Figure(data=[
+                    go.Bar(name='Before', x=chart_data_cost['Faculty'], y=chart_data_cost['Before'], marker_color='#8965e6'), 
+                    go.Bar(name='After', x=chart_data_cost['Faculty'], y=chart_data_cost['After'], marker_color='#03c4da') 
+                ])
+                fig_cost.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
+                st.plotly_chart(fig_cost, use_container_width=True)
             
                 st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only.\n\n")
+            
+            st.markdown("---")
+            st.markdown("### Staff Exclusions Table")
+            
+            staff_list_df = df.copy()
+            staff_list_df['Status'] = staff_list_df.index.map(lambda x: '❌' if x in locked_excluded_global else '✅')
+            
+            exclusion_reason_map = {}
+            for staff_id in staff_list_df.index:
+                if staff_id in locked_excluded_global:
+                    exclusion_reason_map[staff_id] = '; '.join(get_exclusion_reasons(df, staff_id))
+                else:
+                    exclusion_reason_map[staff_id] = ''
+            
+            staff_list_df['Exclusion Reason(s)'] = staff_list_df.index.map(exclusion_reason_map)
+            
+            cols_to_show = ['Status', 'Exclusion Reason(s)', 'Grade Name', 'Faculty', 
+                            'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 
+                            'CoI income (£)', 'Scholarly Output', 'Citations']
+            cols_available = [c for c in cols_to_show if c in staff_list_df.columns]
+            
+            st.dataframe(staff_list_df[cols_available], use_container_width=True, hide_index=True, height=600)
         
-# Default view with tabs
+        # Default view with tabs
         else:
-            # Check if showing research groups grid
             if st.session_state.show_research_groups:
                 st.markdown("### Research Groups")
                 
@@ -1153,7 +1105,6 @@ if st.session_state.data is not None:
                 
                 st.markdown("---")
                 
-                # Filter and Sort controls
                 col_filter_fac, col_filter_sch, col_sort, col_order = st.columns([2, 2, 2, 2])
                 
                 with col_filter_fac:
@@ -1165,7 +1116,6 @@ if st.session_state.data is not None:
                     )
                 
                 with col_filter_sch:
-                    # Get schools based on selected faculty
                     if selected_faculty == 'All Faculties':
                         available_schools = sorted(df['School'].dropna().unique().tolist())
                     else:
@@ -1192,15 +1142,12 @@ if st.session_state.data is not None:
                         key="rg_order"
                     )
                 
-                # Get all research groups first
                 all_rgs = get_entities(df, 'Research Group')
                 
-                # Build list with metrics for sorting and filtering
                 rg_data = []
                 for rg in all_rgs:
                     rg_staff = get_staff_for_entity(df, 'Research Group', rg)
                     
-                    # Get primary faculty and school (most common among staff in this RG)
                     faculty_counts = rg_staff['Faculty'].value_counts()
                     school_counts = rg_staff['School'].value_counts()
                     
@@ -1218,7 +1165,6 @@ if st.session_state.data is not None:
                         'size': staff_count
                     })
                 
-                # Apply filters
                 filtered_rg_data = rg_data
                 if selected_faculty != 'All Faculties':
                     filtered_rg_data = [rg for rg in filtered_rg_data if rg['faculty'] == selected_faculty]
@@ -1226,7 +1172,6 @@ if st.session_state.data is not None:
                 if selected_school != 'All Schools':
                     filtered_rg_data = [rg for rg in filtered_rg_data if rg['school'] == selected_school]
                 
-                # Sort based on selection
                 if sort_option == "Name (A-Z)":
                     filtered_rg_data.sort(key=lambda x: x['name'], reverse=(sort_order == "Descending"))
                 elif sort_option == "Faculty/School":
@@ -1237,43 +1182,35 @@ if st.session_state.data is not None:
                 else:  # Group Size
                     filtered_rg_data.sort(key=lambda x: x['size'], reverse=(sort_order == "Descending"))
                 
-                # Display count of filtered groups
                 st.markdown(f"**Showing {len(filtered_rg_data)} of {len(rg_data)} research groups**")
                 st.markdown("---")
                 
-                # Display in grid format with headings if sorted by Faculty/School
                 num_cols = 4
                 
                 if sort_option == "Faculty/School":
-                    # Group by faculty and school for display with headings
                     current_faculty = None
                     current_school = None
                     
-                    # The index tracker for column positioning must reset after headings
                     col_index_tracker = 0 
                     
                     for idx, rg_item in enumerate(filtered_rg_data):
                         
-                        # Show faculty heading if changed
                         if rg_item['faculty'] != current_faculty:
                             current_faculty = rg_item['faculty']
-                            current_school = None  # Reset school when faculty changes
+                            current_school = None 
                             st.markdown(f"### 🏛️ {current_faculty}")
                             col_index_tracker = 0
                         
-                        # Show school heading if changed
                         if rg_item['school'] != current_school:
                             current_school = rg_item['school']
                             st.markdown(f"#### 🏫 {current_school}")
                             col_index_tracker = 0
                         
-                        # Display research group button
                         rg = rg_item['name']
                         key = f"Research Group::{rg}"
                         is_locked = key in st.session_state.locked_entities
                         icon = "🔒" if is_locked else "🟢"
                         
-                        # Display in columns (4 per row)
                         col_position = col_index_tracker % num_cols
                         if col_position == 0:
                             cols = st.columns(num_cols)
@@ -1282,16 +1219,13 @@ if st.session_state.data is not None:
                             if st.button(f"{icon} {rg}", key=f"rg_{rg}", use_container_width=True):
                                 st.session_state.selected_entity = rg
                                 st.session_state.selected_level = 'Research Group'
-                                if is_locked:
-                                    st.session_state.preview_criteria = deepcopy(st.session_state.locked_entities[key]['criteria'])
-                                else:
-                                    st.session_state.preview_criteria = []
+                                # When selecting, load the applied rules into current_criteria for editing
+                                st.session_state.current_criteria = deepcopy(st.session_state.locked_entities.get(key, {}).get('criteria', []))
                                 st.session_state.show_research_groups = False
                                 st.rerun()
                                 
                         col_index_tracker += 1
                 else:
-                    # Regular grid display without headings
                     num_groups = len(filtered_rg_data)
                     
                     for row_start in range(0, num_groups, num_cols):
@@ -1304,7 +1238,6 @@ if st.session_state.data is not None:
                                 is_locked = key in st.session_state.locked_entities
                                 icon = "🔒" if is_locked else "🟢"
                                 
-                                # Show faculty/school in button label when not grouped
                                 label = f"{icon} {rg}"
                                 if selected_faculty == 'All Faculties' or selected_school == 'All Schools':
                                     label = f"{icon} {rg}\n({rg_item['school']})"
@@ -1312,10 +1245,7 @@ if st.session_state.data is not None:
                                 if st.button(label, key=f"rg_{rg}", use_container_width=True):
                                     st.session_state.selected_entity = rg
                                     st.session_state.selected_level = 'Research Group'
-                                    if is_locked:
-                                        st.session_state.preview_criteria = deepcopy(st.session_state.locked_entities[key]['criteria'])
-                                    else:
-                                        st.session_state.preview_criteria = []
+                                    st.session_state.current_criteria = deepcopy(st.session_state.locked_entities.get(key, {}).get('criteria', []))
                                     st.session_state.show_research_groups = False
                                     st.rerun()
             elif st.session_state.get('show_rg_analysis', False):
@@ -1329,19 +1259,15 @@ if st.session_state.data is not None:
                 
                 st.markdown("---")
                 
-                # Build research group analysis data
                 rg_analysis = []
                 all_rgs = get_entities(df, 'Research Group')
                 
                 for rg in sorted(all_rgs):
                     rg_staff = get_staff_for_entity(df, 'Research Group', rg)
                     
-                    # Calculate before metrics (all staff in group)
                     before_count = len(rg_staff)
                     before_fte = rg_staff['Full-Time Equivalent'].sum()
                     
-                    # Calculate after metrics (excluding locked exclusions)
-                    # Exclusions are now simply the intersection of global locked list and RG staff
                     rg_excluded_ids = locked_excluded_global.intersection(rg_staff.index)
                     
                     after_count = before_count - len(rg_excluded_ids)
@@ -1357,49 +1283,41 @@ if st.session_state.data is not None:
                         'FTE Change': f"{after_fte - before_fte:.2f}"
                     })
                 
-                # Create DataFrame
                 rg_df = pd.DataFrame(rg_analysis)
                 
-                # Display table
                 st.markdown("#### Research Groups Summary Table")
                 st.dataframe(rg_df, use_container_width=True, hide_index=True, height=400)
                 
                 st.markdown("---")
 
-                # Create chart data
                 st.markdown("#### Staff Count by Research Group")
                 
-                # Prepare data sorted by Before count
                 chart_data = rg_df.sort_values('Staff Before', ascending=True)
                 
-                # Create overlapping horizontal bar chart using Plotly
                 fig = go.Figure()
                 
-                # Add Before bars (light blue, full width)
                 fig.add_trace(go.Bar(
                     y=chart_data['Research Group'],
                     x=chart_data['Staff Before'],
                     name='Before',
                     orientation='h',
-                    marker=dict(color='#009BBD'),
+                    marker=dict(color='#8965e6'), 
                     text=chart_data['Staff Before'],
                     textposition='outside'
                 ))
                 
-                # Add After bars (darker blue, overlay on top)
                 fig.add_trace(go.Bar(
                     y=chart_data['Research Group'],
                     x=chart_data['Staff After'],
                     name='After',
                     orientation='h',
-                    marker=dict(color='#005597'),
+                    marker=dict(color='#03c4da'), 
                     text=chart_data['Staff After'],
                     textposition='outside'
                 ))
                 
-                # Update layout for overlay effect
                 fig.update_layout(
-                    barmode='overlay',  # This creates the overlay effect
+                    barmode='overlay', 
                     height=max(400, len(chart_data) * 30),
                     xaxis_title="Staff Count",
                     yaxis_title="Research Group",
@@ -1417,11 +1335,9 @@ if st.session_state.data is not None:
             else:
                 tab1, tab2 = st.tabs(["Unit Selection", "ALL Staff"])
             
-                # TAB 1: Unit Selection
                 with tab1:
                     col_fac, col_sch, col_dep, col_rg = st.columns(4)
                     
-                    # Helper function for rendering buttons
                     def render_unit_buttons(col, level, heading):
                         with col:
                             st.markdown(f"### {heading}")
@@ -1429,29 +1345,19 @@ if st.session_state.data is not None:
                             for entity in entities:
                                 key = f"{level}::{entity}"
                                 is_locked = key in st.session_state.locked_entities
-                                # Check if it's the result of a *parent* lock
                                 is_inherited = is_locked and st.session_state.locked_entities[key].get('inherited_from') is not None
                                 
-                                # Use icon to show state: Lock (local lock), Open Lock (inherited lock), Circle (unlocked)
                                 icon = "🔒" if is_locked and not is_inherited else "🔓" if is_inherited else "🟢"
                                 
-                                # If it's a Research Group, it can't inherit, so just Locked/Unlocked
                                 if level == 'Research Group':
                                     icon = "🔒" if is_locked else "🟢"
 
                                 if st.button(f"{icon} {entity}", key=f"{level.lower()}_{entity}", use_container_width=True):
                                     st.session_state.selected_entity = entity
                                     st.session_state.selected_level = level
-                                    if is_locked:
-                                        # When clicking a locked unit, load its *locked* criteria for preview/edit
-                                        st.session_state.preview_criteria = deepcopy(st.session_state.locked_entities[key]['criteria'])
-                                    else:
-                                        # When clicking an unlocked unit, start with empty criteria
-                                        st.session_state.preview_criteria = []
-                                        # Check if it has a parent lock, if so, trigger the warning dialog
-                                        if level != 'Research Group' and len(get_parent_locks(level, entity)) > 0:
-                                            st.session_state.show_unlock_warning = True
-
+                                    # Load applied rules into current_criteria for editing
+                                    st.session_state.current_criteria = deepcopy(st.session_state.locked_entities.get(key, {}).get('criteria', []))
+                                    st.session_state.show_unlock_warning = False # Not needed anymore, but good practice
                                     st.rerun()
                                     
                     render_unit_buttons(col_fac, 'Faculty', 'Faculties')
@@ -1460,13 +1366,12 @@ if st.session_state.data is not None:
                     
                     with col_rg:
                         st.markdown("### Research Groups")
-                        st.markdown("")  # Spacing
-                        st.markdown("")  # Spacing
+                        st.markdown("") 
+                        st.markdown("") 
                         if st.button("📋 View All Research Groups", key="view_rg_button", use_container_width=True, type="primary"):
                             st.session_state.show_research_groups = True
                             st.rerun()
                             
-                # TAB 2: ALL Staff
                 with tab2:
                     st.markdown("### Complete Staff List")
                     
@@ -1475,7 +1380,6 @@ if st.session_state.data is not None:
                         display_df = df.copy()
                         display_df['Status'] = display_df.index.map(lambda x: '❌' if x in locked_excluded_global else '✅')
                         
-                        # Use a map to store and fetch exclusion reasons
                         exclusion_reason_map = {}
                         for staff_id in df.index:
                             if staff_id in locked_excluded_global:
@@ -1489,7 +1393,6 @@ if st.session_state.data is not None:
                                     'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 'CoI income (£)', 'Scholarly Output', 
                                         'Citations', 'Research Group 1','Research Group 2','Research Group 3','Research Group 4']
                         
-                        # Filter to only show columns that exist in the DataFrame
                         cols_available = [c for c in cols_to_show if c in display_df.columns]
                     
                     st.dataframe(display_df[cols_available], use_container_width=True, hide_index=True, height=600)
