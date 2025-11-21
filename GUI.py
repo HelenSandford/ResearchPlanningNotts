@@ -373,20 +373,20 @@ def create_metrics_table(before_metrics, after_metrics):
         'Before': [
             before_metrics['count'], f"{before_metrics['fte']:.2f}", f"£{before_metrics['total_coi']:,.0f}",
             f"£{before_metrics['coi_per_fte']:,.0f}", f"{before_metrics['total_schol']:.0f}",
-            f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:.0f}",
+            f"{before_metrics['schol_per_fte']:.2f}", f"{before_metrics['total_cit']:,.0f}",
             f"{before_metrics['cit_per_fte']:.0f}", f"{before_metrics['cit_per_pub']:.2f}",
             f"£{before_metrics['total_rt_cost']:,.0f}", f"{before_metrics['total_pgr']:.0f}",
             f"{before_metrics['pgr_per_fte']:.2f}", f"{before_metrics['total_ese_contact']:,.0f}", 
-            f"{before_metrics['ese_per_fte']:.0f}"
+            f"{before_metrics['ese_per_fte']:,.0f}"
         ],
         'After': [
             after_metrics['count'], f"{after_metrics['fte']:.2f}", f"£{after_metrics['total_coi']:,.0f}",
             f"£{after_metrics['coi_per_fte']:,.0f}", f"{after_metrics['total_schol']:.0f}",
-            f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:.0f}",
+            f"{after_metrics['schol_per_fte']:.2f}", f"{after_metrics['total_cit']:,.0f}",
             f"{after_metrics['cit_per_fte']:.0f}", f"{after_metrics['cit_per_pub']:.2f}",
             f"£{after_metrics['total_rt_cost']:,.0f}", f"{after_metrics['total_pgr']:.0f}",
             f"{after_metrics['pgr_per_fte']:.2f}", f"{after_metrics['total_ese_contact']:,.0f}", 
-            f"{after_metrics['ese_per_fte']:.0f}"
+            f"{after_metrics['ese_per_fte']:,.0f}"
         ],
         'Change': [
             format_change_with_pct(count_change, before_metrics['count']),
@@ -1079,13 +1079,7 @@ if st.session_state.data is not None:
                     'After': grade_after.values
                 })
                 
-                # Use a proper bar chart tool for better visual control
-                fig_grade = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_grade['Grade'], y=chart_data_grade['Before'], marker_color='#8965e6'),
-                    go.Bar(name='After', x=chart_data_grade['Grade'], y=chart_data_grade['After'], marker_color='#03c4da')
-                ])
-                fig_grade.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_grade, use_container_width=True)
+                st.bar_chart(chart_data_grade.set_index('Grade'), color=['#210048', '#005070'], stack=False, height=500)
             
             with col_chart2:
                 st.markdown("#### FTE by Years of Service")
@@ -1097,17 +1091,11 @@ if st.session_state.data is not None:
                 service_after = df_after.groupby('Service_Category')['Full-Time Equivalent'].sum().reindex(service_order, fill_value=0)
                 
                 chart_data_service = pd.DataFrame({
-                    'Service': service_order,
                     'Before': service_before.values,
                     'After': service_after.values
-                })
+                }, index=pd.CategoricalIndex(service_order, categories=service_order, ordered=True))
                 
-                fig_service = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_service['Service'], y=chart_data_service['Before'], marker_color='#8965e6'),
-                    go.Bar(name='After', x=chart_data_service['Service'], y=chart_data_service['After'], marker_color='#03c4da')
-                ])
-                fig_service.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_service, use_container_width=True)
+                st.bar_chart(chart_data_service, color=['#210048', '#005070'], stack=False, height=500)
             
             # Chart 3 & 4: FTE and R&T Costs by Faculty (side by side)
             col_chart3, col_chart4 = st.columns(2)
@@ -1123,12 +1111,7 @@ if st.session_state.data is not None:
                     'After': faculty_after.values
                 })
                 
-                fig_faculty = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_faculty['Faculty'], y=chart_data_faculty['Before'], marker_color='#8965e6'),
-                    go.Bar(name='After', x=chart_data_faculty['Faculty'], y=chart_data_faculty['After'], marker_color='#03c4da')
-                ])
-                fig_faculty.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_faculty, use_container_width=True)
+                st.bar_chart(chart_data_faculty.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
             
             with col_chart4:
                 st.markdown("#### R&T Contract Costs by Faculty (£) ⚠️")
@@ -1146,12 +1129,7 @@ if st.session_state.data is not None:
                     'After': cost_after.values
                 })
                 
-                fig_cost = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_cost['Faculty'], y=chart_data_cost['Before'], marker_color='#8965e6'),
-                    go.Bar(name='After', x=chart_data_cost['Faculty'], y=chart_data_cost['After'], marker_color='#03c4da')
-                ])
-                fig_cost.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_cost, use_container_width=True)
+                st.bar_chart(chart_data_cost.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
             
                 st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only.\n\n")
         
@@ -1403,7 +1381,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff Before'],
                     name='Before',
                     orientation='h',
-                    marker=dict(color='#8965e6'),
+                    marker=dict(color='#87CEEB'),
                     text=chart_data['Staff Before'],
                     textposition='outside'
                 ))
@@ -1414,7 +1392,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff After'],
                     name='After',
                     orientation='h',
-                    marker=dict(color='#03c4da'),
+                    marker=dict(color='#4682B4'),
                     text=chart_data['Staff After'],
                     textposition='outside'
                 ))
