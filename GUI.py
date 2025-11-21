@@ -278,7 +278,7 @@ def matches_grade(grade_name, grade_filter):
         return grade_str.startswith('CL')
     return grade_str == grade_filter
 
-def apply_single_criterion(staff_data, criterion):
+def apply_single_criterion(staff_data, criterion, available_staff_ids=None):
     filtered = staff_data.copy()
     
     if criterion.get('grades'):
@@ -299,16 +299,28 @@ def apply_single_criterion(staff_data, criterion):
         percent = criterion['bottom_percentile']
         sort_metrics = criterion['sort_by']
         
-        normalized_df = filtered.copy()
+        # 1. Start with staff that passed the rule's absolute filters (filtered)
+        percentile_base_df = filtered.copy()
+        
+        if available_staff_ids is not None:
+            # 2. Restrict the percentile cut to staff who are not yet excluded 
+            #    by a lower-priority rule (cumulative exclusion).
+            percentile_base_df = percentile_base_df[percentile_base_df.index.isin(available_staff_ids)]
+
+        if len(percentile_base_df) == 0:
+            return set()
+            
+        normalized_df = percentile_base_df.copy()
         for metric in sort_metrics:
-            if metric in filtered.columns and 'Full-Time Equivalent' in filtered.columns:
-                normalized_df[f'{metric}_normalized'] = filtered.apply(
+            if metric in normalized_df.columns and 'Full-Time Equivalent' in normalized_df.columns:
+                normalized_df[f'{metric}_normalized'] = normalized_df.apply(
                     lambda row: row[metric] / row['Full-Time Equivalent'] if row['Full-Time Equivalent'] > 0 else 0,
                     axis=1
                 )
         
         normalized_cols = [f'{m}_normalized' for m in sort_metrics]
         ascending_list = [True] * len(normalized_cols)
+        # Sort the restricted set for the cut
         normalized_df = normalized_df.sort_values(by=normalized_cols, ascending=ascending_list, kind='stable')
         
         total_fte = normalized_df['Full-Time Equivalent'].sum()
@@ -324,18 +336,19 @@ def apply_single_criterion(staff_data, criterion):
                 break
         
         return set(to_exclude)
-
-    # If not a percentile rule, 'filtered' contains the staff who satisfied the Grade/Service criteria (i.e., staff to KEEP)
-    # We must return the set of staff who DID NOT make the cut (i.e., staff to EXCLUDE).
+    
+    # FOR GRADE/SERVICE RULES: Staff that passed absolute criteria are in 'filtered'.
+    # Staff that did NOT pass are the EXCLUDED set.
     excluded_ids = set(staff_data.index) - set(filtered.index)
     return excluded_ids
-
-def apply_criteria(staff_data, criteria_list):
+    
+def apply_criteria(staff_data, criteria_list, available_staff_ids=None):
     if not criteria_list:
         return set()
     excluded = set()
     for criterion in criteria_list:
-        excluded.update(apply_single_criterion(staff_data, criterion))
+        # Pass the available_staff_ids for percentile cuts
+        excluded.update(apply_single_criterion(staff_data, criterion, available_staff_ids=available_staff_ids))
     return excluded
 
 def get_rt_cost(grade_name):
@@ -478,11 +491,12 @@ def calculate_metrics(staff_data, excluded_ids=None):
 def get_locked_excluded_ids(df):
     """
     Computes the final set of excluded staff IDs based on all active locks.
-    Higher priority (closer to staff) locks override lower priority ones.
+    Rules are applied cumulatively from lowest priority (Faculty) to highest (Research Group).
+    The percentile cut is applied only to staff not yet excluded by a lower-priority rule.
     """
-    staff_exclusions = {}  # staff_id -> (excluded: True/False, lock_key)
+    final_excluded_ids = set()
     
-    # Priority: Faculty (lowest) < School < Department < Research Group (highest)
+    # Priority: Faculty (1) < School (2) < Department (3) < Research Group (4)
     priority_map = {'Faculty': 1, 'School': 2, 'Department': 3, 'Research Group': 4}
     
     # Sort all locks by priority (lowest first)
@@ -491,34 +505,25 @@ def get_locked_excluded_ids(df):
         key=lambda x: priority_map.get(x[0].split('::')[0], 0)
     )
     
-    # Process each lock
+    # Process each lock in order of increasing priority (Cumulative Exclusion)
     for lock_key, lock_data in sorted_locks:
         lock_level, lock_entity = lock_key.split('::')
         
         # 1. Get ALL staff in the entity associated with the lock
         lock_staff = get_staff_for_entity(df, lock_level, lock_entity)
         
-        # 2. Identify the staff EXCLUDED by THIS lock's criteria
-        lock_excluded = apply_criteria(lock_staff, lock_data['criteria'])
+        # 2. Determine the pool of staff available for the *percentile* calculation for this lock:
+        # These are staff in the lock_staff set who are NOT already in final_excluded_ids.
+        available_staff_ids = set(lock_staff.index) - final_excluded_ids
         
-        # 3. For all staff in this entity, update their final exclusion status
-        for staff_id in lock_staff.index:
-            is_excluded_by_this_lock = staff_id in lock_excluded
-            current_priority = priority_map.get(lock_level, 0)
-            
-            if staff_id not in staff_exclusions:
-                staff_exclusions[staff_id] = (is_excluded_by_this_lock, lock_key)
-            else:
-                _, existing_key = staff_exclusions[staff_id]
-                existing_level = existing_key.split('::')[0]
-                existing_priority = priority_map.get(existing_level, 0)
-                
-                # If current lock is higher priority, or same priority, overwrite
-                if current_priority >= existing_priority:
-                    staff_exclusions[staff_id] = (is_excluded_by_this_lock, lock_key)
-    
-    # Return all staff marked as excluded
-    return {staff_id for staff_id, (is_excluded, _) in staff_exclusions.items() if is_excluded}
+        # 3. Identify the staff EXCLUDED by THIS lock's criteria
+        # Pass the pool of available staff (only used by percentile cuts within apply_criteria)
+        lock_excluded = apply_criteria(lock_staff, lock_data['criteria'], available_staff_ids=available_staff_ids)
+        
+        # 4. The staff excluded by this lock are added to the final set.
+        final_excluded_ids.update(lock_excluded)
+        
+    return final_excluded_ids
 
 def get_exclusion_reasons(df, staff_id):
     """Provides a list of lock entities that exclude the staff member."""
