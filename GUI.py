@@ -969,12 +969,7 @@ if st.session_state.data is not None:
                     'After': grade_after.values
                 })
                 
-                fig_grade = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_grade['Grade'], y=chart_data_grade['Before'], marker_color='#8965e6'), 
-                    go.Bar(name='After', x=chart_data_grade['Grade'], y=chart_data_grade['After'], marker_color='#03c4da') 
-                ])
-                fig_grade.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_grade, use_container_width=True)
+                st.bar_chart(chart_data_grade.set_index('Grade'), color=['#210048', '#005070'], stack=False, height=500)
             
             with col_chart2:
                 st.markdown("#### FTE by Years of Service")
@@ -986,17 +981,11 @@ if st.session_state.data is not None:
                 service_after = df_after.groupby('Service_Category')['Full-Time Equivalent'].sum().reindex(service_order, fill_value=0)
                 
                 chart_data_service = pd.DataFrame({
-                    'Service': service_order,
                     'Before': service_before.values,
                     'After': service_after.values
-                })
+                }, index=pd.CategoricalIndex(service_order, categories=service_order, ordered=True))
                 
-                fig_service = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_service['Service'], y=chart_data_service['Before'], marker_color='#8965e6'), 
-                    go.Bar(name='After', x=chart_data_service['Service'], y=chart_data_service['After'], marker_color='#03c4da') 
-                ])
-                fig_service.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_service, use_container_width=True)
+                st.bar_chart(chart_data_service, color=['#210048', '#005070'], stack=False, height=500)
             
             # Chart 3 & 4: FTE and R&T Costs by Faculty (side by side)
             col_chart3, col_chart4 = st.columns(2)
@@ -1012,16 +1001,12 @@ if st.session_state.data is not None:
                     'After': faculty_after.values
                 })
                 
-                fig_faculty = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_faculty['Faculty'], y=chart_data_faculty['Before'], marker_color='#8965e6'), 
-                    go.Bar(name='After', x=chart_data_faculty['Faculty'], y=chart_data_faculty['After'], marker_color='#03c4da') 
-                ])
-                fig_faculty.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_faculty, use_container_width=True)
+                st.bar_chart(chart_data_faculty.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
             
             with col_chart4:
                 st.markdown("#### R&T Contract Costs by Faculty (£) ⚠️")
                 
+                # Calculate R&T costs by faculty
                 df_before['RT_Cost'] = df_before.apply(lambda row: get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'], axis=1)
                 df_after['RT_Cost'] = df_after.apply(lambda row: get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'], axis=1)
                 
@@ -1034,36 +1019,11 @@ if st.session_state.data is not None:
                     'After': cost_after.values
                 })
                 
-                fig_cost = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_cost['Faculty'], y=chart_data_cost['Before'], marker_color='#210048'), 
-                    go.Bar(name='After', x=chart_data_cost['Faculty'], y=chart_data_cost['After'], marker_color='#005070') 
-                ])
-                fig_cost.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
-                st.plotly_chart(fig_cost, use_container_width=True)
+                st.bar_chart(chart_data_cost.set_index('Faculty'), color=['#210048', '#005070'], stack=False, height=500, use_container_width=True)
             
                 st.caption("⚠️ R&T Contract Costs are indicative and include mid-point costs and savings for R&T contracts only.\n\n")
-            
-            st.markdown("---")
-            st.markdown("### Staff Exclusions Table")
-            
-            staff_list_df = df.copy()
-            staff_list_df['Status'] = staff_list_df.index.map(lambda x: '❌' if x in locked_excluded_global else '✅')
-            
-            exclusion_reason_map = {}
-            for staff_id in staff_list_df.index:
-                if staff_id in locked_excluded_global:
-                    exclusion_reason_map[staff_id] = '; '.join(get_exclusion_reasons(df, staff_id))
-                else:
-                    exclusion_reason_map[staff_id] = ''
-            
-            staff_list_df['Exclusion Reason(s)'] = staff_list_df.index.map(exclusion_reason_map)
-            
-            cols_to_show = ['Status', 'Exclusion Reason(s)', 'Grade Name', 'Faculty', 
-                            'School', 'Department', 'Full-Time Equivalent', 'Length of service (years)', 
-                            'CoI income (£)', 'Scholarly Output', 'Citations']
-            cols_available = [c for c in cols_to_show if c in staff_list_df.columns]
-            
-            st.dataframe(staff_list_df[cols_available], use_container_width=True, hide_index=True, height=600)
+        
+
         
         # Default view with tabs
         else:
