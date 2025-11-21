@@ -360,7 +360,7 @@ def create_metrics_table(before_metrics, after_metrics):
     }
     return pd.DataFrame(metrics_data)
 
-def calculate_metrics(staff_data, excluded_ids=None):
+def calculate_metrics(staff_data, excluded_ids=None, original_staff_data=None):
     if excluded_ids is None:
         excluded_ids = set()
     included = staff_data[~staff_data.index.isin(excluded_ids)]
@@ -381,16 +381,21 @@ def calculate_metrics(staff_data, excluded_ids=None):
     total_rt_cost = sum(get_rt_cost(row['Grade Name']) * row['Full-Time Equivalent'] 
                         for _, row in included.iterrows())
     
-    # Calculate PGR students
-    total_pgr = included['PGR Active students'].sum() if 'PGR Active students' in included.columns else 0
+    # For PGR and ESE, use original staff data if provided (for "after" calculations)
+    # This ensures these totals remain constant
+    data_for_pgr_ese = original_staff_data if original_staff_data is not None else staff_data
     
-    # Calculate ESE Contact Hours (Hours * Sessions * Headcount)
+    # Calculate PGR students from original data
+    total_pgr = data_for_pgr_ese['PGR Active students'].sum() if 'PGR Active students' in data_for_pgr_ese.columns else 0
+    
+    # Calculate ESE Contact Hours from original data (Hours * Sessions * Headcount)
     total_ese_contact = 0
-    if all(col in included.columns for col in ['ESE Hours Timetabled', 'ESE Sessions Timetabled', 'ESE Headcount Timetabled']):
-        included['ESE_Contact_Hours'] = (included['ESE Hours Timetabled'] * 
-                                         included['ESE Sessions Timetabled'] * 
-                                         included['ESE Headcount Timetabled'])
-        total_ese_contact = included['ESE_Contact_Hours'].sum()
+    if all(col in data_for_pgr_ese.columns for col in ['ESE Hours Timetabled', 'ESE Sessions Timetabled', 'ESE Headcount Timetabled']):
+        data_for_pgr_ese_copy = data_for_pgr_ese.copy()
+        data_for_pgr_ese_copy['ESE_Contact_Hours'] = (data_for_pgr_ese_copy['ESE Hours Timetabled'] * 
+                                         data_for_pgr_ese_copy['ESE Sessions Timetabled'] * 
+                                         data_for_pgr_ese_copy['ESE Headcount Timetabled'])
+        total_ese_contact = data_for_pgr_ese_copy['ESE_Contact_Hours'].sum()
     
     return {
         'count': len(included), 'fte': total_fte, 'total_coi': total_coi,
