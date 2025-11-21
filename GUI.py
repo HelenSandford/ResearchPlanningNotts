@@ -922,7 +922,7 @@ if st.session_state.data is not None:
                     excluded_staff_df = df[df.index.isin(entity_staff_excluded_ids)]
                     excluded_fte = excluded_staff_df['Full-Time Equivalent'].sum()
                     
-                    st.info(f"💡 **No LOCAL rules are active for this unit.** However, staff exclusions are being applied due to rules set at a lower level (affecting **{excluded_fte:.2f} FTE**).")
+                    st.info(f"💡 **No LOCAL rules are active for this unit.** However, staff exclusions are being applied due to rules set elsewhere (affecting **{excluded_fte:.2f} FTE**).")
                 else:
                     st.info("No exclusion rules are currently active for this unit.")
             
