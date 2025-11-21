@@ -1261,7 +1261,7 @@ if st.session_state.data is not None:
                     xaxis_title="Staff Count",
                     yaxis_title="Research Group",
                     showlegend=True,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#e8e8e8')),
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='#1a1a2e',
                     font=dict(color='#c4c2c2')
