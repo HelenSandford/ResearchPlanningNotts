@@ -1264,7 +1264,7 @@ if st.session_state.data is not None:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     plot_bgcolor='rgba(0,0,0,0)',
                     #paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#e8e8e8')
+                    font=dict(color='#c4c2c2')
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
