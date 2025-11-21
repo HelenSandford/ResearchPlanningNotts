@@ -1263,13 +1263,11 @@ if st.session_state.data is not None:
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     #plot_bgcolor='rgba(0,0,0,0)',
-                    #paper_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='#e8e8e8')
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
-                
-                st.caption("💡 Light purple shows original staff count, light blue overlay shows remaining staff after exclusions")
                
             else:
                 tab1, tab2 = st.tabs(["Unit Selection", "ALL Staff"])
