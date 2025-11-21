@@ -1035,8 +1035,8 @@ if st.session_state.data is not None:
                 })
                 
                 fig_cost = go.Figure(data=[
-                    go.Bar(name='Before', x=chart_data_cost['Faculty'], y=chart_data_cost['Before'], marker_color='#8965e6'), 
-                    go.Bar(name='After', x=chart_data_cost['Faculty'], y=chart_data_cost['After'], marker_color='#03c4da') 
+                    go.Bar(name='Before', x=chart_data_cost['Faculty'], y=chart_data_cost['Before'], marker_color='#210048'), 
+                    go.Bar(name='After', x=chart_data_cost['Faculty'], y=chart_data_cost['After'], marker_color='#005070') 
                 ])
                 fig_cost.update_layout(barmode='group', height=500, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e8e8e8'))
                 st.plotly_chart(fig_cost, use_container_width=True)
@@ -1280,7 +1280,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff Before'],
                     name='Before',
                     orientation='h',
-                    marker=dict(color='#8965e6'), 
+                    marker=dict(color='#009BBD'), 
                     text=chart_data['Staff Before'],
                     textposition='outside'
                 ))
@@ -1290,7 +1290,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff After'],
                     name='After',
                     orientation='h',
-                    marker=dict(color='#03c4da'), 
+                    marker=dict(color='#005597'), 
                     text=chart_data['Staff After'],
                     textposition='outside'
                 ))
