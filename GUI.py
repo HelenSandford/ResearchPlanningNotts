@@ -526,10 +526,22 @@ if st.session_state.data is not None:
     with col_summary:
         if st.session_state.selected_entity and st.session_state.selected_level:
             st.markdown(f"### {st.session_state.selected_entity} Summary")
-            entity_staff = get_staff_for_entity(df, st.session_state.selected_level, st.session_state.selected_entity)
+            
+            entity_staff = get_staff_for_entity(df, level, entity)
+            
+            # For "after" metrics, need to consider ALL locks that affect this entity's staff
+            # This includes Research Group locks that override Faculty/School/Department locks
+            all_excluded_for_entity = set()
+            for staff_id in entity_staff.index:
+                if staff_id in locked_excluded:
+                    all_excluded_for_entity.add(staff_id)
+            
+            # Add preview criteria exclusions (for unlocked entities being edited)
             preview_excluded = apply_criteria(entity_staff, st.session_state.preview_criteria)
+            all_excluded_for_entity.update(preview_excluded)
+            
             entity_before = calculate_metrics(entity_staff)
-            entity_after = calculate_metrics(entity_staff, preview_excluded)
+            entity_after = calculate_metrics(entity_staff, all_excluded_for_entity)
             
             # Calculate deltas
             staff_delta = entity_after['count'] - entity_before['count']
@@ -647,9 +659,20 @@ if st.session_state.data is not None:
                     """, unsafe_allow_html=True)
             
             entity_staff = get_staff_for_entity(df, level, entity)
+            
+            # For "after" metrics, need to consider ALL locks that affect this entity's staff
+            # This includes Research Group locks that override Faculty/School/Department locks
+            all_excluded_for_entity = set()
+            for staff_id in entity_staff.index:
+                if staff_id in locked_excluded:
+                    all_excluded_for_entity.add(staff_id)
+            
+            # Add preview criteria exclusions (for unlocked entities being edited)
             preview_excluded = apply_criteria(entity_staff, st.session_state.preview_criteria)
+            all_excluded_for_entity.update(preview_excluded)
+            
             entity_before = calculate_metrics(entity_staff)
-            entity_after = calculate_metrics(entity_staff, preview_excluded)
+            entity_after = calculate_metrics(entity_staff, all_excluded_for_entity)
             
             st.markdown("---")
             
