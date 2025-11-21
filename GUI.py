@@ -1381,7 +1381,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff Before'],
                     name='Before',
                     orientation='h',
-                    marker=dict(color='#87CEEB'),
+                    marker=dict(color='#009BBD'),
                     text=chart_data['Staff Before'],
                     textposition='outside'
                 ))
@@ -1392,7 +1392,7 @@ if st.session_state.data is not None:
                     x=chart_data['Staff After'],
                     name='After',
                     orientation='h',
-                    marker=dict(color='#4682B4'),
+                    marker=dict(color='#005597'),
                     text=chart_data['Staff After'],
                     textposition='outside'
                 ))
