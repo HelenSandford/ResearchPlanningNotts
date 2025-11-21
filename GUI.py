@@ -897,7 +897,13 @@ if st.session_state.data is not None:
                             st.markdown("### <br>", unsafe_allow_html=True) # Use spacing for vertical alignment
                             if st.button("➕ Add New Rule", key="add_rule_dynamic", use_container_width=True, type="primary"):
                                 # Add a new empty rule to the current criteria
-                                st.session_state.current_criteria.append({})
+                                # Initialize new rule with neutral values
+                                st.session_state.current_criteria.append({
+                                    'grades': [],
+                                    'service_years': ('', 0),
+                                    'bottom_percentile': 0,
+                                    'sort_by': []
+                                })
                                 # Automatically apply the updated rules (re-save the lock)
                                 update_entity_rules(level, entity, st.session_state.current_criteria)
                                 st.rerun()
